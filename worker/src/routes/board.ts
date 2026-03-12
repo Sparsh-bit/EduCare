@@ -25,7 +25,7 @@ router.get('/config', authenticate, async (c) => {
     const schoolId = user.school_id
     if (!schoolId) return c.json({ error: 'User is not mapped to a school' }, 403)
     const supabase = getSupabase(c.env)
-    const { data } = await supabase.from('board_config').select('*').eq('school_id', schoolId).single()
+    const { data } = await supabase.from('board_config').select('*').eq('school_id', schoolId).maybeSingle()
     return c.json(data || {})
   } catch {
     return c.json({ error: 'Internal server error' }, 500)
@@ -53,7 +53,7 @@ router.post('/config', authenticate, ownerOnly(), async (c) => {
       sa_weightage: sa_weightage ?? 30,
     }
 
-    const { data: existing } = await supabase.from('board_config').select('id').eq('school_id', schoolId).single()
+    const { data: existing } = await supabase.from('board_config').select('id').eq('school_id', schoolId).maybeSingle()
     if (existing) {
       await supabase.from('board_config').update(payload).eq('school_id', schoolId)
     } else {
@@ -157,7 +157,7 @@ router.get('/report-card-config', authenticate, async (c) => {
     const schoolId = user.school_id
     if (!schoolId) return c.json({ error: 'User is not mapped to a school' }, 403)
     const supabase = getSupabase(c.env)
-    const { data } = await supabase.from('report_card_config').select('*').eq('school_id', schoolId).single()
+    const { data } = await supabase.from('report_card_config').select('*').eq('school_id', schoolId).maybeSingle()
     return c.json(data || {})
   } catch {
     return c.json({ error: 'Internal server error' }, 500)
@@ -181,7 +181,7 @@ router.post('/report-card-config', authenticate, ownerOnly(), async (c) => {
       show_remarks: show_remarks ?? true,
     }
 
-    const { data: existing } = await supabase.from('report_card_config').select('id').eq('school_id', schoolId).single()
+    const { data: existing } = await supabase.from('report_card_config').select('id').eq('school_id', schoolId).maybeSingle()
     if (existing) {
       await supabase.from('report_card_config').update(payload).eq('school_id', schoolId)
     } else {
@@ -206,7 +206,7 @@ router.get('/co-scholastic/:studentId/:academicYearId/:term', authenticate, asyn
 
     const { data } = await supabase.from('cce_co_scholastic').select('*')
       .eq('school_id', schoolId).eq('student_id', studentId)
-      .eq('academic_year_id', academicYearId).eq('term', term).single()
+      .eq('academic_year_id', academicYearId).eq('term', term).maybeSingle()
     return c.json(data || {})
   } catch {
     return c.json({ error: 'Internal server error' }, 500)
@@ -238,7 +238,7 @@ router.post('/co-scholastic', authenticate, authorize('owner', 'co-owner', 'teac
     }
 
     const { data: existing } = await supabase.from('cce_co_scholastic').select('id')
-      .eq('school_id', schoolId).eq('student_id', student_id).eq('academic_year_id', academic_year_id).eq('term', term).single()
+      .eq('school_id', schoolId).eq('student_id', student_id).eq('academic_year_id', academic_year_id).eq('term', term).maybeSingle()
 
     if (existing) {
       await supabase.from('cce_co_scholastic').update(gradeData).eq('id', (existing as Record<string, unknown>).id)
@@ -321,7 +321,7 @@ router.post('/co-scholastic/bulk', authenticate, authorize('owner', 'co-owner', 
       }
 
       const { data: existing } = await supabase.from('cce_co_scholastic').select('id')
-        .eq('school_id', schoolId).eq('student_id', student_id).eq('academic_year_id', academic_year_id).eq('term', term).single()
+        .eq('school_id', schoolId).eq('student_id', student_id).eq('academic_year_id', academic_year_id).eq('term', term).maybeSingle()
 
       if (existing) {
         await supabase.from('cce_co_scholastic').update(gradeData).eq('id', (existing as Record<string, unknown>).id)
@@ -398,15 +398,15 @@ router.get('/report-card/:studentId/:examId', authenticate, async (c) => {
     const { data: coScholastic } = await supabase.from('cce_co_scholastic').select('*')
       .eq('school_id', schoolId).eq('student_id', studentId)
       .eq('academic_year_id', (historyRow as Record<string, unknown>).academic_year_id)
-      .eq('term', coScholasticTerm).single()
+      .eq('term', coScholasticTerm).maybeSingle()
 
-    // Attendance stats
-    const { data: attendanceRows } = await supabase.from('attendance').select('status').eq('student_id', studentId)
+    // Attendance stats (scoped to school via student already validated above)
+    const { data: attendanceRows } = await supabase.from('attendance').select('status').eq('student_id', studentId).eq('school_id', schoolId)
     const totalDays = (attendanceRows || []).length
     const presentDays = (attendanceRows || []).filter((a: Record<string, unknown>) => a.status === 'P' || a.status === 'HD').length
 
     // Report card config
-    const { data: rcConfig } = await supabase.from('report_card_config').select('*').eq('school_id', schoolId).single()
+    const { data: rcConfig } = await supabase.from('report_card_config').select('*').eq('school_id', schoolId).maybeSingle()
 
     return c.json({
       student: {

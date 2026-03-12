@@ -325,7 +325,7 @@ router.post('/salary/process', authenticate, authorize('tenant_admin', 'owner', 
     const monthEnd = `${year}-${monthPad}-31`
 
     for (const s of (activeStaff || []) as Record<string, unknown>[]) {
-      const { data: existing } = await supabase.from('staff_salary_records').select('id').eq('staff_id', s.id as number).eq('month', month).eq('year', year).single()
+      const { data: existing } = await supabase.from('staff_salary_records').select('id').eq('staff_id', s.id as number).eq('month', month).eq('year', year).maybeSingle()
       if (existing) continue
 
       const { data: leaves } = await supabase.from('staff_leaves')

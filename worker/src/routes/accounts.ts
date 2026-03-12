@@ -56,7 +56,8 @@ router.post('/income', authenticate, authorize(...acctRoles), async (c) => {
     }
 
     const supabase = getSupabase(c.env)
-    const { data: entry } = await supabase.from('income_entries').insert({ ...body, created_by: user.id, school_id: schoolId }).select().single()
+    const { data: entry, error: entryErr } = await supabase.from('income_entries').insert({ ...body, created_by: user.id, school_id: schoolId }).select().single()
+    if (entryErr || !entry) return c.json({ error: 'Failed to record income' }, 500)
 
     await supabase.from('notices').insert({
       title: 'Accounts: New Income Recorded',
@@ -149,7 +150,8 @@ router.post('/expenses', authenticate, authorize(...acctRoles), async (c) => {
     }
 
     const supabase = getSupabase(c.env)
-    const { data: entry } = await supabase.from('expense_entries').insert({ ...body, created_by: user.id, school_id: schoolId }).select().single()
+    const { data: entry, error: entryErr } = await supabase.from('expense_entries').insert({ ...body, created_by: user.id, school_id: schoolId }).select().single()
+    if (entryErr || !entry) return c.json({ error: 'Failed to record expense' }, 500)
 
     await supabase.from('notices').insert({
       title: 'Accounts: New Expense Recorded',
@@ -233,7 +235,8 @@ router.post('/vendors', authenticate, authorize(...acctRoles), async (c) => {
     const body = await c.req.json()
     if (!body.name) return c.json({ error: 'name is required' }, 400)
     const supabase = getSupabase(c.env)
-    const { data: vendor } = await supabase.from('vendors').insert({ ...body, school_id: schoolId }).select().single()
+    const { data: vendor, error: vendorErr } = await supabase.from('vendors').insert({ ...body, school_id: schoolId }).select().single()
+    if (vendorErr || !vendor) return c.json({ error: 'Failed to add vendor' }, 500)
     return c.json({ message: 'Vendor added', data: vendor }, 201)
   } catch {
     return c.json({ error: 'Internal server error' }, 500)

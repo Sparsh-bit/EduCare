@@ -286,7 +286,7 @@ router.get('/student/:studentId/report-card/:examId', authenticate, async (c) =>
     const { data: exam } = await supabase.from('exams').select('*').eq('id', examId).eq('school_id', schoolId).single()
     if (!exam) return c.json({ error: 'Exam not found' }, 404)
 
-    const { data: schoolSettings } = await supabase.from('school_settings').select('school_name').eq('school_id', schoolId).single()
+    const { data: schoolSettings } = await supabase.from('school_settings').select('school_name').eq('school_id', schoolId).maybeSingle()
     const schoolName = (schoolSettings as Record<string, unknown>)?.school_name as string || 'School'
 
     const { data: examSubjects } = await supabase.from('exam_subjects').select('*, subjects(name)').eq('exam_id', examId)

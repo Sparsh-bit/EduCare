@@ -272,9 +272,10 @@ router.get('/me', authenticate, async (c) => {
   try {
     const user = c.get('user')
     const supabase = getSupabase(c.env)
-    const { data } = await supabase.from('users')
+    const { data, error } = await supabase.from('users')
       .select('id, username, email, name, phone, role, preferred_language, school_id, email_verified, created_at')
       .eq('id', user.id).single()
+    if (error || !data) return c.json({ error: 'User not found' }, 404)
     return c.json(data)
   } catch {
     return c.json({ error: 'Internal server error' }, 500)
@@ -314,18 +315,17 @@ router.post('/change-password', authenticate, async (c) => {
     const supabase = getSupabase(c.env)
 
     // Verify current password via Supabase Auth
-    const { data: userRecord } = await supabase.from('users').select('email').eq('id', user.id).single()
+    const { data: userRecord } = await supabase.from('users').select('email, supabase_auth_id').eq('id', user.id).single()
     const { error: verifyErr } = await supabase.auth.signInWithPassword({
       email: userRecord?.email || user.email,
       password: currentPassword,
     })
     if (verifyErr) return c.json({ error: 'Current password is incorrect' }, 400)
 
-    // Get supabase_auth_id or find user by email
-    const { data: authUsers } = await supabase.auth.admin.listUsers()
-    const authUser = authUsers?.users?.find(u => u.email?.toLowerCase() === (userRecord?.email || user.email).toLowerCase())
-    if (authUser) {
-      await supabase.auth.admin.updateUserById(authUser.id, { password: newPassword })
+    // Update password via supabase_auth_id (O(1) — no listUsers scan)
+    const authId = userRecord?.supabase_auth_id
+    if (authId) {
+      await supabase.auth.admin.updateUserById(authId, { password: newPassword })
     }
 
     await createAuditLog(supabase, {
@@ -523,11 +523,10 @@ router.put('/users/:userId/reset-password', authenticate, ownerOnly(), async (c)
     if (!targetUser) return c.json({ error: 'User not found' }, 404)
     if (targetUser.role === 'owner') return c.json({ error: 'Use change-password for your own account' }, 403)
 
-    // Reset via Supabase Auth
-    const { data: authUsers } = await supabase.auth.admin.listUsers()
-    const authUser = authUsers?.users?.find(u => u.email?.toLowerCase() === targetUser.email?.toLowerCase())
-    if (authUser) {
-      await supabase.auth.admin.updateUserById(authUser.id, { password: newPassword })
+    // Reset via supabase_auth_id (O(1) — no listUsers scan)
+    const authId = (targetUser as Record<string, unknown>).supabase_auth_id as string | null
+    if (authId) {
+      await supabase.auth.admin.updateUserById(authId, { password: newPassword })
     }
 
     await createAuditLog(supabase, {
@@ -603,13 +602,12 @@ router.post('/reset-password', async (c) => {
       return c.json({ error: 'This reset link has expired. Please request a new one.' }, 400)
     }
 
-    const { data: resetUser } = await supabase.from('users').select('email, school_id').eq('id', record.user_id).single()
+    const { data: resetUser } = await supabase.from('users').select('email, school_id, supabase_auth_id').eq('id', record.user_id).single()
 
-    // Update password via Supabase Auth
-    const { data: authUsers } = await supabase.auth.admin.listUsers()
-    const authUser = authUsers?.users?.find(u => u.email?.toLowerCase() === resetUser?.email?.toLowerCase())
-    if (authUser) {
-      await supabase.auth.admin.updateUserById(authUser.id, { password: newPassword })
+    // Update password via supabase_auth_id (O(1) — no listUsers scan)
+    const authId = (resetUser as Record<string, unknown> | null)?.supabase_auth_id as string | null
+    if (authId) {
+      await supabase.auth.admin.updateUserById(authId, { password: newPassword })
     }
 
     await supabase.from('password_reset_tokens').update({ used_at: new Date().toISOString() }).eq('id', record.id)

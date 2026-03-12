@@ -53,7 +53,7 @@ export function buildR2Key(schoolId: number, folder: string, filename: string): 
 }
 
 /** Retrieve an object from R2. Returns null if the key doesn't exist. */
-export async function getFromR2(env: Env, key: string): Promise<R2Object | null> {
+export async function getFromR2(env: Env, key: string): Promise<R2ObjectBody | null> {
   return env.BUCKET.get(key)
 }
 

@@ -90,6 +90,7 @@ router.post('/homework', authenticate, authorize('tenant_admin', 'owner', 'co-ow
     const { data: classExists } = await supabase.from('classes').select('id').eq('id', class_id).eq('school_id', schoolId).single()
     if (!classExists) return c.json({ error: 'Invalid class for your school' }, 400)
 
+    // Validate section belongs to the class; class ownership already validated above
     const { data: sectionExists } = await supabase.from('sections').select('id').eq('id', section_id).eq('class_id', class_id).single()
     if (!sectionExists) return c.json({ error: 'Invalid section for selected class' }, 400)
 

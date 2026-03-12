@@ -57,7 +57,7 @@ router.get('/export', authenticate, async (c) => {
     }
 
     // Infrastructure
-    const { data: infra } = await supabase.from('udise_infrastructure').select('*').eq('school_id', schoolId).single()
+    const { data: infra } = await supabase.from('udise_infrastructure').select('*').eq('school_id', schoolId).maybeSingle()
 
     // Totals
     const { data: allStudents } = await supabase.from('students').select('id, is_rte').eq('school_id', schoolId).eq('status', 'active')
@@ -111,7 +111,7 @@ router.get('/infrastructure', authenticate, async (c) => {
     if (!schoolId) return c.json({ error: 'User is not mapped to a school' }, 403)
     const supabase = getSupabase(c.env)
 
-    const { data } = await supabase.from('udise_infrastructure').select('*').eq('school_id', schoolId).single()
+    const { data } = await supabase.from('udise_infrastructure').select('*').eq('school_id', schoolId).maybeSingle()
     return c.json(data || {})
   } catch {
     return c.json({ error: 'Internal server error' }, 500)
@@ -130,7 +130,7 @@ router.post('/infrastructure', authenticate, ownerOnly(), async (c) => {
     const { classrooms, labs, library_books, boys_toilets, girls_toilets, has_drinking_water, has_electricity, has_internet, has_playground, has_medical_room } = body
     const infraData = { classrooms, labs, library_books, boys_toilets, girls_toilets, has_drinking_water, has_electricity, has_internet, has_playground, has_medical_room }
 
-    const { data: existing } = await supabase.from('udise_infrastructure').select('id').eq('school_id', schoolId).single()
+    const { data: existing } = await supabase.from('udise_infrastructure').select('id').eq('school_id', schoolId).maybeSingle()
     if (existing) {
       await supabase.from('udise_infrastructure').update(infraData).eq('school_id', schoolId)
     } else {

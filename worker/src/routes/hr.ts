@@ -23,7 +23,7 @@ router.get('/teacher-assignments', authenticate, authorize('tenant_admin', 'owne
     if (class_id) query = query.eq('class_id', class_id)
     if (section_id) query = query.eq('section_id', section_id)
 
-    const { data } = await query.order('school_id')
+    const { data } = await query.order('class_id').order('section_id')
     return c.json(data || [])
   } catch {
     return c.json({ error: 'Internal server error' }, 500)
@@ -210,6 +210,7 @@ router.get('/leave-balances/:staff_id', authenticate, async (c) => {
     const { data } = await supabase.from('leave_balances')
       .select('*, leave_types(name, code)')
       .eq('staff_id', staff_id)
+      .eq('school_id', schoolId)
 
     return c.json(data || [])
   } catch {

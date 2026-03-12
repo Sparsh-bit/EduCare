@@ -52,8 +52,8 @@ router.post('/enquiries', authenticate, authorize(...fdRoles), async (c) => {
     const supabase = getSupabase(c.env)
 
     // Generate enquiry number
-    const { data: last } = await supabase.from('admission_enquiries').select('enquiry_number').eq('school_id', schoolId).order('id', { ascending: false }).limit(1).single()
-    const seq = last ? (parseInt(String(last.enquiry_number).split('/').pop() || '0') + 1) : 1
+    const { data: last } = await supabase.from('admission_enquiries').select('enquiry_number').eq('school_id', schoolId).order('id', { ascending: false }).limit(1).maybeSingle()
+    const seq = last ? (parseInt(String((last as Record<string, unknown>).enquiry_number).split('/').pop() || '0') + 1) : 1
     const enquiry_number = `ENQ/${new Date().getFullYear()}/${String(seq).padStart(4, '0')}`
 
     const { data: enquiry } = await supabase.from('admission_enquiries').insert({
@@ -209,7 +209,7 @@ router.get('/student-lookup', authenticate, authorize(...fdRoles), async (c) => 
       .select('id, name, admission_no, current_roll_no, sr_no, student_uid, father_name, father_phone, classes(name), sections(name)')
       .eq('school_id', schoolId).is('deleted_at', null)
       .or(`current_roll_no.ilike.${term},admission_no.ilike.%${term}%,sr_no.ilike.${term},student_uid.ilike.${term}`)
-      .limit(1).single()
+      .limit(1).maybeSingle()
 
     return c.json({ data: student || null })
   } catch {
@@ -264,8 +264,8 @@ router.post('/gate-passes', authenticate, authorize(...fdRoles), async (c) => {
     const supabase = getSupabase(c.env)
 
     const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
-    const { data: last } = await supabase.from('gate_passes').select('pass_number').eq('school_id', schoolId).order('id', { ascending: false }).limit(1).single()
-    const seq = last ? (parseInt(String(last.pass_number).split('-').pop() || '0') + 1) : 1
+    const { data: last } = await supabase.from('gate_passes').select('pass_number').eq('school_id', schoolId).order('id', { ascending: false }).limit(1).maybeSingle()
+    const seq = last ? (parseInt(String((last as Record<string, unknown>).pass_number).split('-').pop() || '0') + 1) : 1
     const pass_number = `GP-${today}-${String(seq).padStart(3, '0')}`
 
     const { data: gatePass } = await supabase.from('gate_passes').insert({
@@ -480,8 +480,8 @@ router.post('/lost-found', authenticate, authorize(...fdRoles), async (c) => {
     }
     const supabase = getSupabase(c.env)
 
-    const { data: last } = await supabase.from('lost_and_found').select('item_number').eq('school_id', schoolId).order('id', { ascending: false }).limit(1).single()
-    const seq = last ? (parseInt(String(last.item_number).split('/').pop() || '0') + 1) : 1
+    const { data: last } = await supabase.from('lost_and_found').select('item_number').eq('school_id', schoolId).order('id', { ascending: false }).limit(1).maybeSingle()
+    const seq = last ? (parseInt(String((last as Record<string, unknown>).item_number).split('/').pop() || '0') + 1) : 1
     const item_number = `LF/${new Date().getFullYear()}/${String(seq).padStart(4, '0')}`
 
     const { data: item } = await supabase.from('lost_and_found').insert({

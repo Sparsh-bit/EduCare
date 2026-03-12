@@ -248,7 +248,7 @@ router.get('/receipt/:paymentId', authenticate, authorize('owner', 'co-owner', '
     let receiptNumber = p.receipt_number as string | null
     if (!receiptNumber) {
       // Get or create sequence
-      const { data: seq } = await supabase.from('payment_receipt_sequence').select('*').eq('school_id', schoolId).single()
+      const { data: seq } = await supabase.from('payment_receipt_sequence').select('*').eq('school_id', schoolId).maybeSingle()
       let nextSeq = 1
       let prefix = 'RCP'
 
@@ -306,7 +306,7 @@ router.get('/upi-qr/:studentId', authenticate, authorize('owner', 'co-owner', 'a
     const { data: student } = await supabase.from('students').select('id, name').eq('id', studentId).eq('school_id', schoolId).single()
     if (!student) return c.json({ success: false, error: 'Student not found' }, 404)
 
-    const { data: qr } = await supabase.from('upi_qr_codes').select('*').eq('school_id', schoolId).eq('student_id', studentId).eq('is_active', true).single()
+    const { data: qr } = await supabase.from('upi_qr_codes').select('*').eq('school_id', schoolId).eq('student_id', studentId).eq('is_active', true).maybeSingle()
 
     const s = student as Record<string, unknown>
     if (qr) return c.json({ success: true, data: qr })

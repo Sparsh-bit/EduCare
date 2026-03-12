@@ -40,7 +40,7 @@ router.get('/config', authenticate, async (c) => {
     const schoolId = user.school_id
     if (!schoolId) return c.json({ error: 'User is not mapped to a school' }, 403)
     const supabase = getSupabase(c.env)
-    const { data } = await supabase.from('tax_config').select('*').eq('school_id', schoolId).single()
+    const { data } = await supabase.from('tax_config').select('*').eq('school_id', schoolId).maybeSingle()
     return c.json(data || {})
   } catch {
     return c.json({ error: 'Internal server error' }, 500)
@@ -60,7 +60,7 @@ router.post('/config', authenticate, ownerOnly(), async (c) => {
     const { id: _id, ...rest } = body
     const data = { ...rest, school_id: schoolId }
 
-    const { data: existing } = await supabase.from('tax_config').select('id').eq('school_id', schoolId).single()
+    const { data: existing } = await supabase.from('tax_config').select('id').eq('school_id', schoolId).maybeSingle()
     if (existing) {
       await supabase.from('tax_config').update(data).eq('school_id', schoolId)
     } else {
@@ -127,7 +127,7 @@ router.get('/salary-structure/:staffId', authenticate, async (c) => {
     if (!schoolId) return c.json({ error: 'User is not mapped to a school' }, 403)
     const { staffId } = c.req.param()
     const supabase = getSupabase(c.env)
-    const { data } = await supabase.from('salary_structure').select('*').eq('school_id', schoolId).eq('staff_id', staffId).single()
+    const { data } = await supabase.from('salary_structure').select('*').eq('school_id', schoolId).eq('staff_id', staffId).maybeSingle()
     return c.json(data || {})
   } catch {
     return c.json({ error: 'Internal server error' }, 500)
@@ -167,7 +167,7 @@ router.post('/salary-structure', authenticate, authorize('owner', 'co-owner', 'h
       declared_hra_exemption: declared_hra_exemption || 0,
     }
 
-    const { data: existing } = await supabase.from('salary_structure').select('id').eq('school_id', schoolId).eq('staff_id', staff_id).single()
+    const { data: existing } = await supabase.from('salary_structure').select('id').eq('school_id', schoolId).eq('staff_id', staff_id).maybeSingle()
     if (existing) {
       await supabase.from('salary_structure').update(structureData).eq('id', (existing as Record<string, unknown>).id)
     } else {
@@ -226,7 +226,7 @@ router.post('/payroll/process', authenticate, authorize('owner', 'co-owner', 'hr
     const supabase = getSupabase(c.env)
 
     const [{ data: taxConfig }, { data: ptSlabs }] = await Promise.all([
-      supabase.from('tax_config').select('*').eq('school_id', schoolId).single(),
+      supabase.from('tax_config').select('*').eq('school_id', schoolId).maybeSingle(),
       supabase.from('professional_tax_slabs').select('*').eq('school_id', schoolId).order('min_salary'),
     ])
 
@@ -356,7 +356,7 @@ router.get('/payroll/:id/slip', authenticate, async (c) => {
     if (!slip) return c.json({ error: 'Payslip not found' }, 404)
 
     const [{ data: taxConfig }, { data: school }] = await Promise.all([
-      supabase.from('tax_config').select('pan_number, epf_establishment_id').eq('school_id', schoolId).single(),
+      supabase.from('tax_config').select('pan_number, epf_establishment_id').eq('school_id', schoolId).maybeSingle(),
       supabase.from('schools').select('name').eq('id', schoolId).single(),
     ])
 
@@ -503,7 +503,7 @@ router.get('/gst-report', authenticate, async (c) => {
     const supabase = getSupabase(c.env)
     const { month, year } = c.req.query()
 
-    const { data: taxConfig } = await supabase.from('tax_config').select('*').eq('school_id', schoolId).single()
+    const { data: taxConfig } = await supabase.from('tax_config').select('*').eq('school_id', schoolId).maybeSingle()
     const tc = taxConfig as Record<string, unknown>
 
     if (!tc?.gst_applicable) {

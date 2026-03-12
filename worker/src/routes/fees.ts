@@ -129,8 +129,8 @@ router.post('/pay/cash', authenticate, authorize('tenant_admin', 'owner', 'co-ow
     const { data: academicYear } = await supabase.from('academic_years').select('id').eq('is_current', true).eq('school_id', schoolId).single()
     if (!academicYear) return c.json({ error: 'No active academic year' }, 400)
 
-    // Check duplicate
-    const { data: existingPayment } = await supabase.from('fee_payments').select('id').eq('student_id', student_id).eq('installment_id', installment_id).single()
+    // Check duplicate (maybeSingle — 0 rows means not yet paid, which is valid)
+    const { data: existingPayment } = await supabase.from('fee_payments').select('id').eq('student_id', student_id).eq('installment_id', installment_id).maybeSingle()
     if (existingPayment) return c.json({ error: 'Payment already recorded for this installment' }, 409)
 
     const lateFee = calculateLateFee(
@@ -259,8 +259,8 @@ router.post('/pay/verify', authenticate, authorize('tenant_admin', 'owner', 'co-
     const { data: academicYear } = await supabase.from('academic_years').select('id').eq('is_current', true).eq('school_id', schoolId).single()
     if (!academicYear) return c.json({ error: 'No active academic year' }, 400)
 
-    // Duplicate check
-    const { data: existingPayment } = await supabase.from('fee_payments').select('id').eq('student_id', student_id).eq('installment_id', installment_id).single()
+    // Duplicate check (maybeSingle — 0 rows means not yet paid, which is valid)
+    const { data: existingPayment } = await supabase.from('fee_payments').select('id').eq('student_id', student_id).eq('installment_id', installment_id).maybeSingle()
     if (existingPayment) return c.json({ error: 'Payment already recorded for this installment' }, 409)
 
     const lateFee = calculateLateFee(
@@ -406,7 +406,7 @@ router.get('/dues', authenticate, authorize('tenant_admin', 'owner', 'co-owner',
     const result = []
     for (const student of (students || []) as Record<string, unknown>[]) {
       const { data: feeStructure } = await supabase.from('fee_structures')
-        .select('total_amount').eq('class_id', student.current_class_id as number).eq('academic_year_id', (academicYear as Record<string, unknown>).id as number).is('deleted_at', null).single()
+        .select('total_amount').eq('class_id', student.current_class_id as number).eq('academic_year_id', (academicYear as Record<string, unknown>).id as number).is('deleted_at', null).maybeSingle()
       if (!feeStructure) continue
 
       const { data: payments } = await supabase.from('fee_payments').select('amount_paid').eq('student_id', student.id as number).eq('academic_year_id', (academicYear as Record<string, unknown>).id as number)
@@ -567,7 +567,7 @@ router.post('/settings', authenticate, authorize('tenant_admin', 'owner', 'co-ow
     if (!academicYear) return c.json({ error: 'No active academic year' }, 400)
 
     const { data: existing } = await supabase.from('fee_settings')
-      .select('id').eq('academic_year_id', (academicYear as Record<string, unknown>).id as number).eq('school_id', schoolId).single()
+      .select('id').eq('academic_year_id', (academicYear as Record<string, unknown>).id as number).eq('school_id', schoolId).maybeSingle()
 
     const data = { ...body, school_id: schoolId, academic_year_id: (academicYear as Record<string, unknown>).id }
 

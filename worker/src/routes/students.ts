@@ -829,7 +829,7 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
 
         let duplicateStudent: Record<string, unknown> | null = null
         if (admissionNoCandidate) {
-          const { data: dup } = await supabase.from('students').select('id').eq('school_id', schoolId).eq('admission_no', admissionNoCandidate).is('deleted_at', null).single()
+          const { data: dup } = await supabase.from('students').select('id').eq('school_id', schoolId).eq('admission_no', admissionNoCandidate).is('deleted_at', null).maybeSingle()
           duplicateStudent = dup as Record<string, unknown> | null
         }
         if (!duplicateStudent) {
@@ -955,7 +955,7 @@ router.get('/import/last', authenticate, authorize('owner', 'co-owner', 'tenant_
     const schoolId = user.school_id
     if (!schoolId) return c.json({ error: 'User is not mapped to a school' }, 403)
     const supabase = getSupabase(c.env)
-    const { data: batch } = await supabase.from('student_import_batches').select('*').eq('school_id', schoolId).order('created_at', { ascending: false }).limit(1).single()
+    const { data: batch } = await supabase.from('student_import_batches').select('*').eq('school_id', schoolId).order('created_at', { ascending: false }).limit(1).maybeSingle()
     if (!batch) return c.json({ error: 'No import batches found' }, 404)
     const { data: items } = await supabase.from('student_import_batch_items')
       .select('row_number, status, student_name, class_name, error')
@@ -973,7 +973,7 @@ router.post('/import/last/revert', authenticate, authorize('owner', 'co-owner', 
     const schoolId = user.school_id
     if (!schoolId) return c.json({ error: 'User is not mapped to a school' }, 403)
     const supabase = getSupabase(c.env)
-    const { data: batch } = await supabase.from('student_import_batches').select('*').eq('school_id', schoolId).eq('status', 'completed').order('created_at', { ascending: false }).limit(1).single()
+    const { data: batch } = await supabase.from('student_import_batches').select('*').eq('school_id', schoolId).eq('status', 'completed').order('created_at', { ascending: false }).limit(1).maybeSingle()
     if (!batch) return c.json({ error: 'No completed import batch found to revert' }, 404)
     const batchId = (batch as Record<string, unknown>).id as number
 

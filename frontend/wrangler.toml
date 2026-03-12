@@ -1,0 +1,27 @@
+# Cloudflare Pages — EduCare ERP Frontend
+# Deploy: connect this repo to Cloudflare Pages dashboard
+#   Framework preset : Next.js
+#   Build command    : npm run build && npm run pages:build
+#   Output directory : .vercel/output/static
+#   Node version     : 20
+
+name = "ndps-erp-frontend"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+# ── Environment variables ──
+# Set SECRETS (API keys, tokens) in the Cloudflare Pages dashboard under:
+#   Settings → Environment variables → Production / Preview
+#
+# NON-SECRET vars that are safe to commit:
+[vars]
+NODE_ENV = "production"
+
+# ─────────────────────────────────────────────
+# Variables to add in the Cloudflare Dashboard:
+# ─────────────────────────────────────────────
+# NEXT_PUBLIC_API_URL        = https://your-backend.railway.app/api
+# NEXT_PUBLIC_SUPABASE_URL   = https://xxxx.supabase.co
+# NEXT_PUBLIC_SUPABASE_ANON_KEY = <anon key>
+# WEB3FORMS_ACCESS_KEY       = <web3forms key>

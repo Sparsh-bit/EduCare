@@ -1,0 +1,241 @@
+@import "tailwindcss";
+
+:root {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --accent: #0f766e;
+  --accent-light: rgba(15, 118, 110, 0.1);
+  --accent-bg: rgba(15, 118, 110, 0.16);
+  --bg: #f4f7fb;
+  --card: #ffffff;
+  --border: #dbe4ee;
+  --text: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.card-glass,
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.stat-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.dashboard-input,
+.dashboard-area input,
+.dashboard-area select,
+.dashboard-area textarea {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: 0.75rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-area input:focus,
+.dashboard-area select:focus,
+.dashboard-area textarea:focus {
+  outline: none !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-bg) !important;
+}
+
+.dashboard-area input::placeholder,
+.dashboard-area select::placeholder,
+.dashboard-area textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  padding: 0.65rem 1.2rem;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.btn-primary:hover {
+  background: #0b5f58;
+  box-shadow: 0 8px 20px rgba(15, 118, 110, 0.24);
+}
+
+.btn-secondary {
+  background: var(--card);
+  color: var(--text-secondary);
+  font-weight: 600;
+  padding: 0.65rem 1.2rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.data-table thead th {
+  background: #f8fafc;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.data-table tbody td {
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: var(--text-secondary);
+}
+
+.data-table tbody tr:hover td {
+  background: #f8fafc;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-green {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-red {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badge-yellow {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-blue {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.dashboard-area {
+  font-family: "Manrope", var(--font-sans);
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.dashboard-area .overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+.dashboard-area table {
+  min-width: max-content;
+}
+
+.dashboard-area [class*='bg-white'] {
+  border-color: #e2e8f0;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-area .sticky {
+    position: static !important;
+    top: auto !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-area [class*='grid-cols-2'],
+  .dashboard-area [class*='grid-cols-3'],
+  .dashboard-area [class*='grid-cols-4'],
+  .dashboard-area [class*='grid-cols-5'],
+  .dashboard-area [class*='grid-cols-6'],
+  .dashboard-area [class*='grid-cols-7'] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .data-table thead th,
+  .data-table tbody td {
+    padding: 0.625rem 0.75rem;
+  }
+}

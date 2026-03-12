@@ -1,0 +1,50 @@
+# Railway deployment configuration for EduCare ERP Backend
+# Docs: https://docs.railway.app/reference/config-as-code
+
+[build]
+# Use the existing multi-stage Dockerfile
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Dockerfile CMD already runs migrations then starts the server:
+#   sh -c "npm run migrate && node dist/app.js"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# ──────────────────────────────────────────────────
+# Set these environment variables in the Railway
+# dashboard under your service → Variables:
+# ──────────────────────────────────────────────────
+# DATABASE_URL          (Railway Postgres public URL — OR use individual DB_* vars below)
+# DB_HOST               (Supabase pooler host)
+# DB_PORT               5432
+# DB_NAME               postgres
+# DB_USER               postgres
+# DB_PASSWORD           <supabase db password>
+# DB_SSL                true
+#
+# JWT_SECRET            <min 32 chars, cryptographically random>
+# JWT_REFRESH_SECRET    <min 32 chars, cryptographically random>
+# AADHAAR_ENCRYPTION_KEY <min 32 chars, cryptographically random>
+#
+# FRONTEND_URL          https://ndps-erp.pages.dev,https://www.ndps.edu.in
+# PORT                  5000
+# NODE_ENV              production
+# TRUST_PROXY           1
+#
+# ERP_API_KEY           ndps_erp_f02ce2e9eb93ce8d74502cb82ec33b43f7584aad00fece1649f5d03146ebc530
+#
+# RESEND_API_KEY        <resend key>
+# EMAIL_FROM            EduCare by Concilio <EduCare@concilio.solutions>
+#
+# GEMINI_API_KEY        <gemini key>
+# RAZORPAY_KEY_ID       <if online payments enabled>
+# RAZORPAY_KEY_SECRET   <if online payments enabled>
+# ENABLE_ONLINE_PAYMENTS false
+#
+# MSG91_AUTH_KEY        <if SMS enabled>
+# LATE_FEE_PER_DAY      50
+# LATE_FEE_MAX          2000

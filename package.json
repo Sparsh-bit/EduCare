@@ -1,0 +1,14 @@
+{
+  "name": "erp-project",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Pages + Workers compatible ERP deployment layer",
+  "scripts": {
+    "build:pages": "node scripts/prepare-pages.mjs",
+    "dev": "npm run build:pages && wrangler pages dev .cloudflare/public --functions=functions",
+    "deploy": "npm run build:pages && wrangler pages deploy .cloudflare/public --functions=functions --project-name=erp-project"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.17"
+  }
+}

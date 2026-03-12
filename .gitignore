@@ -1,0 +1,42 @@
+# Environment variables (all directories)
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+db.env
+
+# Secrets & credentials
+*.pem
+*.key
+*.p12
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+out/
+.cloudflare/
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Uploads (local dev data)
+uploads/
+
+# Docker volumes
+pgdata/

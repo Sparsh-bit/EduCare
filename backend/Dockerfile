@@ -1,0 +1,23 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine
+
+WORKDIR /app
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/src ./src
+
+RUN mkdir -p uploads logs && chown -R node:node /app
+USER node
+EXPOSE 5000
+
+# Only run migrations on startup; seeding must be done explicitly via:
+#   docker exec ndps_backend npm run seed
+CMD ["sh", "-c", "npm run migrate && node dist/app.js"]
+

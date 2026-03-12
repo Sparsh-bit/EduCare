@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ERP Project | Landing</title>
+    <link rel="stylesheet" href="/landing.css" />
+  </head>
+  <body>
+    <main class="landing">
+      <header class="hero">
+        <p class="badge">Cloudflare Ready</p>
+        <h1>ERP Project</h1>
+        <p class="subtitle">
+          Frontend served on Cloudflare Pages with API endpoints on Workers runtime.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="/app/">Open Dashboard</a>
+          <a class="button secondary" href="/api/students">Test API</a>
+        </div>
+      </header>
+
+      <section class="api-panel">
+        <h2>Quick API Check</h2>
+        <button id="check-api" type="button">Check `/api/teachers`</button>
+        <pre id="api-output">Click the button to verify Workers API response.</pre>
+      </section>
+    </main>
+    <script type="module" src="/landing.js"></script>
+  </body>
+</html>

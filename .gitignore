@@ -40,3 +40,18 @@ uploads/
 
 # Docker volumes
 pgdata/
+
+# Development/local scripts (not for version control)
+mcp_server_script.js
+app/
+
+# Temporary files
+tmp-upload.csv
+backend/tmp-upload.csv
+testDB.ts
+backend/testDB.ts
+backend/test-pooler.js
+backend/_schema_check.js
+backend/check-tables.js
+backend/check-tables2.js
+backend/list-users.js

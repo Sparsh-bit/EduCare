@@ -1,0 +1,51 @@
+name = "school-erp-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── KV Namespace (rate limiting) ───
+# Create with: wrangler kv namespace create RATE_LIMIT_KV
+# Then paste the returned id below.
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# ─── R2 Bucket (file uploads) ───
+# Bucket: schoolerp (Account ID: 7936d8ce546e62cc7bd91870d7824de8)
+# Files served via Worker /api/files/* (authenticated). Keep bucket PRIVATE.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "schoolerp"
+
+# ─── Non-secret environment variables ───
+[vars]
+FRONTEND_URL = "https://school-erp.pages.dev"
+LATE_FEE_PER_DAY = "50"
+LATE_FEE_MAX = "2000"
+
+# ─── Secrets — set via CLI, NEVER hardcode here ───
+# Run ONCE after first deploy:
+#
+#   wrangler secret put SUPABASE_URL
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   wrangler secret put JWT_SECRET
+#   wrangler secret put JWT_REFRESH_SECRET
+#   wrangler secret put RESEND_API_KEY
+#   wrangler secret put RAZORPAY_KEY_ID
+#   wrangler secret put RAZORPAY_KEY_SECRET
+#   wrangler secret put MSG91_AUTH_KEY
+#   wrangler secret put MSG91_SENDER_ID
+#   wrangler secret put MSG91_TEMPLATE_ID
+#   wrangler secret put ERP_API_KEY
+#
+# ─── Scalability notes ───
+# Free plan: 100k req/day, 10ms CPU/req.
+# Upgrade to Workers Paid ($5/mo) if daily traffic exceeds 100k.
+#
+# WHY NOT D1: D1 is SQLite with 1 writer at a time. Under concurrent fee
+# payments or bulk attendance marking, writes would queue and time out.
+# Supabase (PostgreSQL via HTTP) handles concurrent writes correctly and
+# all existing data is already there. Do not migrate to D1.
+#
+# R2: scales automatically, no limits to worry about.
+# KV: scales automatically. Rate limiter uses it safely.

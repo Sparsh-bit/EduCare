@@ -21,14 +21,14 @@ export default function StaffIdCardPage() {
         window.print();
     };
 
-    if (loading) return <div className="p-8 text-center text-gray-500">Loading Staff...</div>;
+    if (loading) return <div className="p-8 text-center text-slate-500">Loading Staff...</div>;
 
     return (
         <div className="p-6">
             <div className="flex justify-between items-center mb-6 print:hidden">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Staff ID Cards</h1>
-                    <p className="text-sm text-gray-500">View and print employee ID cards</p>
+                    <h1 className="text-2xl font-bold text-slate-900">Staff ID Cards</h1>
+                    <p className="text-sm text-slate-500">View and print employee ID cards</p>
                 </div>
                 <button
                     onClick={handlePrint}
@@ -43,14 +43,14 @@ export default function StaffIdCardPage() {
                     <div key={staff.id} className="bg-white border-2 border-[#6c5ce7]/20 rounded-xl overflow-hidden shadow-sm flex flex-col items-center p-6 text-center break-inside-avoid">
                         <div className="w-full bg-[#6c5ce7] h-16 absolute top-0 left-0 right-0 z-0 opacity-10" />
 
-                        <div className="w-20 h-20 rounded-full bg-gray-200 border-4 border-white shadow-sm z-10 overflow-hidden mb-3 flex items-center justify-center text-3xl">
+                        <div className="w-20 h-20 rounded-full bg-slate-200 border-4 border-white shadow-sm z-10 overflow-hidden mb-3 flex items-center justify-center text-3xl">
                             👤
                         </div>
 
-                        <h3 className="font-bold text-lg text-gray-900 z-10">{staff.name}</h3>
+                        <h3 className="font-bold text-lg text-slate-900 z-10">{staff.name}</h3>
                         <p className="text-[#6c5ce7] font-medium text-sm mb-4 tracking-wide">{staff.designation}</p>
 
-                        <div className="w-full space-y-2 mt-2 bg-gray-50 p-3 rounded-lg text-left text-xs text-gray-700">
+                        <div className="w-full space-y-2 mt-2 bg-slate-50 p-3 rounded-lg text-left text-xs text-slate-700">
                             <div className="flex justify-between border-b pb-1">
                                 <span className="font-medium">Emp ID:</span>
                                 <span>EMP-{String(staff.id).padStart(4, '0')}</span>
@@ -66,7 +66,7 @@ export default function StaffIdCardPage() {
                         </div>
 
                         <div className="mt-4 flex flex-col items-center">
-                            <div className="w-32 h-8 bg-black/10 rounded-sm mb-1 flex items-center justify-center text-[8px] text-gray-500 font-mono tracking-widest">
+                            <div className="w-32 h-8 bg-black/10 rounded-sm mb-1 flex items-center justify-center text-[8px] text-slate-500 font-mono tracking-widest">
                                 || | | || | | ||
                             </div>
                         </div>
@@ -74,7 +74,7 @@ export default function StaffIdCardPage() {
                 ))}
 
                 {staffList.length === 0 && (
-                    <div className="col-span-full py-12 text-center text-gray-400">
+                    <div className="col-span-full py-12 text-center text-slate-400">
                         No staff members found.
                     </div>
                 )}

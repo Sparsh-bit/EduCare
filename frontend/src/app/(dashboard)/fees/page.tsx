@@ -3,6 +3,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { api, reportApiError } from '@/lib/api';
 import type { Student, StudentFeeStatus } from '@/lib/types';
 import { toast } from 'react-hot-toast';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { Search, Wallet, CreditCard, Receipt, FileText, Info, CheckCircle2, Zap, Clock } from 'lucide-react';
+
+const containerVariants: Variants = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
+
+const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 25 } }
+};
 
 export default function FeePaymentPage() {
     const [search, setSearch] = useState('');
@@ -68,18 +80,23 @@ export default function FeePaymentPage() {
             toast.error('Select at least one installment');
             return;
         }
+        if (paymentForm.payment_mode === 'online') {
+            toast.error('Online payments must be made through the parent portal');
+            return;
+        }
         setLoading(true);
         try {
+            const perInstallmentAmount = paymentForm.amount_paid / selectedInstallments.length;
             for (const instId of selectedInstallments) {
                 await api.payCash({
                     student_id: selectedStudent!.id,
                     installment_id: instId,
-                    amount_paid: paymentForm.amount_paid / selectedInstallments.length, // Split for simplicity
-                    notes: paymentForm.notes
+                    amount_paid: perInstallmentAmount,
+                    notes: paymentForm.notes,
+                    payment_mode: paymentForm.payment_mode as 'cash' | 'cheque' | 'bank' | 'dd',
                 });
             }
             toast.success('Payment recorded successfully');
-            // Refresh
             const status = await api.getStudentFees(selectedStudent!.id);
             setFeeStatus(status);
             setSelectedInstallments([]);
@@ -91,177 +108,218 @@ export default function FeePaymentPage() {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <motion.div 
+            variants={containerVariants}
+            initial="hidden"
+            animate="show"
+            className="space-y-8 pb-12"
+        >
+            <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Fee Payment Terminal</h1>
-                    <p className="text-sm text-gray-500 mt-1">Search student and process payments instantly</p>
+                    <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-[0.2em] rounded-lg mb-3">
+                        <Wallet size={12} />
+                        Financial Intelligence
+                    </div>
+                    <h1 className="text-4xl font-black tracking-tight text-gray-900 leading-none">
+                        Payment Terminal
+                    </h1>
+                    <p className="text-base text-gray-500 mt-4 font-medium max-w-xl">
+                        A high-precision environment for institutional financial processing and encrypted receipt management.
+                    </p>
                 </div>
-                <div className="relative w-full sm:w-80">
+                <div className="relative w-full md:w-96 group">
+                    <Search size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
                     <input
                         type="text"
-                        placeholder="Search student name or admission no..."
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-sm focus:ring-2 focus:ring-[#6c5ce7]/20 focus:border-[#6c5ce7] outline-none transition-all"
+                        placeholder="Search student or admission-ID…"
+                        className="w-full pl-14 pr-6 py-4 bg-white border border-gray-100 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-600/5 rounded-2xl text-sm font-bold transition-all outline-none shadow-sm placeholder:text-gray-300"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                     />
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-                    {loading && (
-                        <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
-                            <div className="w-4 h-4 border-2 border-[#6c5ce7]/20 border-t-[#6c5ce7] rounded-full animate-spin" />
-                        </div>
-                    )}
+                    <AnimatePresence>
+                        {loading && (
+                            <motion.div 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="absolute right-4 top-1/2 -translate-y-1/2"
+                            >
+                                <div className="w-5 h-5 border-2 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
-                    {searchResults.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-gray-100 shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                            {searchResults.map(s => (
-                                <button
-                                    key={s.id}
-                                    onClick={() => selectStudent(s)}
-                                    className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b last:border-0"
-                                >
-                                    <div className="w-9 h-9 bg-[#f1f0ff] rounded-full flex items-center justify-center text-[#6c5ce7] font-bold text-xs">
-                                        {s.name.charAt(0)}
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="text-sm font-semibold text-gray-900">{s.name}</p>
-                                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">{s.admission_no} • {s.class_name} {s.section_name}</p>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                    <AnimatePresence>
+                        {searchResults.length > 0 && (
+                            <motion.div 
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 10 }}
+                                className="absolute top-full left-0 right-0 mt-3 bg-white rounded-[24px] border border-gray-100 shadow-2xl z-50 overflow-hidden"
+                            >
+                                {searchResults.map(s => (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => selectStudent(s)}
+                                        className="w-full px-5 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors border-b last:border-0 group/item"
+                                    >
+                                        <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xs group-hover/item:scale-110 transition-transform">
+                                            {s.name.charAt(0)}
+                                        </div>
+                                        <div className="text-left">
+                                            <p className="text-sm font-bold text-gray-900">{s.name}</p>
+                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{s.admission_no} • {s.class_name}</p>
+                                        </div>
+                                    </button>
+                                ))}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
-            </div>
+            </motion.div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
                 {/* Left Panel: Profile & Installments */}
-                <div className="lg:col-span-8 space-y-6">
+                <motion.div variants={itemVariants} className="lg:col-span-8 space-y-8">
                     {selectedStudent ? (
                         <>
                             {/* Student Info Card */}
-                            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 overflow-hidden relative">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-[#f1f0ff] rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
-                                <div className="flex flex-col sm:flex-row gap-6 items-center relative z-10">
-                                    <div className="w-24 h-24 bg-gradient-to-br from-[#6c5ce7] to-[#8e44ad] rounded-2xl flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+                            <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm p-8 overflow-hidden relative group">
+                                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full -mr-32 -mt-32 group-hover:scale-110 transition-transform duration-1000 blur-3xl opacity-60" />
+                                <div className="flex flex-col md:flex-row gap-8 items-center relative z-10">
+                                    <div className="w-28 h-28 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-[32px] flex items-center justify-center text-white text-4xl font-black shadow-xl shadow-indigo-100 ring-4 ring-indigo-50 group-hover:rotate-3 transition-transform duration-500">
                                         {selectedStudent.name.charAt(0)}
                                     </div>
-                                    <div className="text-center sm:text-left flex-1">
-                                        <h2 className="text-xl font-bold text-gray-900">{selectedStudent.name}</h2>
-                                        <p className="text-[#6c5ce7] font-medium text-sm mt-1">{selectedStudent.class_name} • Section {selectedStudent.section_name}</p>
-                                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 mt-3">
-                                            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pb-0.5 border-b border-gray-100 flex items-center gap-1">
-                                                <span>ADM:</span>
-                                                <span className="text-gray-900 font-mono">{selectedStudent.admission_no}</span>
+                                    <div className="text-center md:text-left flex-1">
+                                        <h2 className="text-3xl font-black text-gray-900 tracking-tight group-hover:text-indigo-600 transition-colors">{selectedStudent.name}</h2>
+                                        <p className="text-indigo-600 font-black text-[10px] mt-1 uppercase tracking-[0.2em]">{selectedStudent.class_name} • Sector {selectedStudent.section_name}</p>
+                                        <div className="flex flex-wrap items-center justify-center md:justify-start gap-8 mt-6">
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1.5">Admission ID</span>
+                                                <span className="text-xs font-black text-gray-900 font-mono bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-xl">{selectedStudent.admission_no}</span>
                                             </div>
-                                            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pb-0.5 border-b border-gray-100 flex items-center gap-1">
-                                                <span>FATHER:</span>
-                                                <span className="text-gray-900">{selectedStudent.father_name}</span>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1.5">Guardian Vector</span>
+                                                <span className="text-xs font-black text-gray-700">{selectedStudent.mother_name || selectedStudent.father_name}</span>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3 w-full sm:w-auto">
-                                        <div className="bg-green-50 px-4 py-3 rounded-2xl text-center">
-                                            <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider">Paid</p>
-                                            <p className="text-lg font-bold text-green-700">₹{feeStatus?.total_paid || 0}</p>
+                                    <div className="grid grid-cols-2 gap-4 w-full md:w-auto">
+                                        <div className="bg-emerald-50/80 backdrop-blur-xl px-8 py-5 rounded-[32px] text-center border border-emerald-100 shadow-sm group-hover:translate-y--1 transition-transform">
+                                            <p className="text-[10px] text-emerald-600 font-black uppercase tracking-[0.2em] mb-1.5">Processed</p>
+                                            <p className="text-2xl font-black text-emerald-700 tracking-tighter">₹{feeStatus?.total_paid || 0}</p>
                                         </div>
-                                        <div className="bg-red-50 px-4 py-3 rounded-2xl text-center">
-                                            <p className="text-[10px] text-red-600 font-bold uppercase tracking-wider">Due</p>
-                                            <p className="text-lg font-bold text-red-700">₹{feeStatus?.total_due || 0}</p>
+                                        <div className="bg-rose-50/80 backdrop-blur-xl px-8 py-5 rounded-[32px] text-center border border-rose-100 shadow-sm group-hover:translate-y--1 transition-transform delay-75">
+                                            <p className="text-[10px] text-rose-600 font-black uppercase tracking-[0.2em] mb-1.5">Outstanding</p>
+                                            <p className="text-2xl font-black text-rose-700 tracking-tighter">₹{feeStatus?.total_due || 0}</p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Installments Selection */}
-                            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
-                                <h3 className="text-sm font-bold text-gray-900 mb-6 flex items-center gap-2">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-[#f1f0ff]0" />
-                                    Fee Installments
+                            <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm p-8">
+                                <h3 className="text-xl font-black text-gray-900 mb-8 flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 shadow-inner">
+                                        <Receipt size={24} />
+                                    </div>
+                                    Financial Cycles
                                 </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     {feeStatus?.installments?.map((inst) => (
                                         <button
                                             key={inst.id}
                                             disabled={inst.paid}
                                             onClick={() => toggleInstallment(inst.id)}
                                             className={`
-                                                p-4 rounded-2xl border transition-all text-left flex items-center justify-between group
+                                                relative p-6 rounded-[32px] border transition-all text-left flex items-center justify-between group overflow-hidden
                                                 ${inst.paid
-                                                    ? 'bg-gray-50 border-gray-100 cursor-not-allowed opacity-70'
+                                                    ? 'bg-gray-50/50 border-gray-100 cursor-not-allowed opacity-60'
                                                     : selectedInstallments.includes(inst.id)
-                                                        ? 'bg-[#f1f0ff] border-[#6c5ce7]/20 shadow-inner'
-                                                        : 'bg-white border-gray-100 hover:border-[#6c5ce7]/20 hover:shadow-sm'}
+                                                        ? 'bg-indigo-50/30 border-indigo-200 shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-200'
+                                                        : 'bg-white border-gray-100 hover:border-indigo-100 hover:shadow-2xl hover:shadow-indigo-500/10'}
                                             `}
                                         >
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${inst.paid ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 group-hover:bg-[#f1f0ff] group-hover:text-[#6c5ce7]'}`}>
-                                                        {inst.installment_no}
+                                            <div className="relative z-10 flex-1">
+                                                <div className="flex items-center gap-4">
+                                                    <span className={`w-10 h-10 rounded-xl flex items-center justify-center text-[10px] font-black ${inst.paid ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-50 text-gray-400 group-hover:bg-white group-hover:text-indigo-600 group-hover:shadow-sm transition-all'}`}>
+                                                        {inst.installment_no.toString().padStart(2, '0')}
                                                     </span>
-                                                    <span className="text-sm font-bold text-gray-900 capitalize">Installment #{inst.installment_no}</span>
+                                                    <span className="text-sm font-black text-gray-900 tracking-tight">Cycle Phase #{inst.installment_no}</span>
                                                 </div>
-                                                <div className="mt-3 flex flex-col gap-1">
-                                                    <p className="text-xs text-gray-400">Due: <span className="text-gray-600 font-medium">{new Date(inst.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span></p>
-                                                    <p className="text-xs text-[#6c5ce7] font-bold tracking-wide">₹{(inst.amount || 0).toLocaleString('en-IN')}</p>
+                                                <div className="mt-6 space-y-1.5 ml-1">
+                                                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Net Value</p>
+                                                    <p className="text-2xl font-black text-indigo-600 tracking-tighter">₹{(inst.amount || 0).toLocaleString('en-IN')}</p>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <Clock size={12} className="text-gray-300" />
+                                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Due {new Date(inst.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="relative z-10 flex items-center gap-2 ml-4">
                                                 {inst.paid ? (
-                                                    <span className="w-7 h-7 bg-green-500 text-white rounded-full flex items-center justify-center text-[10px]">✓</span>
+                                                    <div className="w-10 h-10 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200 ring-4 ring-emerald-50">
+                                                        <CheckCircle2 size={18} />
+                                                    </div>
                                                 ) : (
-                                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedInstallments.includes(inst.id) ? 'bg-[#6c5ce7] border-[#6c5ce7]' : 'border-gray-200 group-hover:border-[#6c5ce7]/60'}`}>
-                                                        {selectedInstallments.includes(inst.id) && <div className="w-2.5 h-1.5 border-l-2 border-b-2 border-white -rotate-45" style={{ marginBottom: '2px' }} />}
+                                                    <div className={`w-10 h-10 rounded-2xl border-2 flex items-center justify-center transition-all duration-500 ${selectedInstallments.includes(inst.id) ? 'bg-indigo-600 border-indigo-600 shadow-xl shadow-indigo-200 rotate-0' : 'bg-white border-gray-200 group-hover:border-indigo-300 -rotate-12'}`}>
+                                                        {selectedInstallments.includes(inst.id) && <div className="w-3 h-1.5 border-l-3 border-b-3 border-white -rotate-45 mb-1" />}
                                                     </div>
                                                 )}
                                             </div>
+                                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/20 rounded-full blur-2xl -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-1000" />
                                         </button>
                                     ))}
                                 </div>
                             </div>
                         </>
                     ) : (
-                        <div className="bg-white rounded-3xl border border-dashed border-gray-200 p-20 flex flex-col items-center justify-center text-center">
-                            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center text-3xl mb-4 grayscale opacity-50">💰</div>
-                            <h3 className="text-lg font-bold text-gray-900">No Student Selected</h3>
-                            <p className="text-sm text-gray-500 mt-2 max-w-xs mx-auto">Please search for a student using the search bar above to begin processing fees.</p>
+                        <div className="bg-slate-50/50 rounded-[40px] border-2 border-dashed border-slate-200 p-24 flex flex-col items-center justify-center text-center">
+                            <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center text-3xl mb-6 shadow-sm grayscale opacity-30">
+                                <Wallet size={40} className="text-indigo-600" />
+                            </div>
+                            <h3 className="text-xl font-black text-gray-900 tracking-tight">Terminal Standby</h3>
+                            <p className="text-sm text-gray-500 mt-2 max-w-xs mx-auto font-medium">Search for a student using the central registry to initiate financial processing.</p>
                         </div>
                     )}
-                </div>
+                </motion.div>
 
                 {/* Right Panel: Payment Form */}
-                <div className="lg:col-span-4 sticky top-6">
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden">
-                        <div className="bg-[#6c5ce7] p-6 text-white">
-                            <h3 className="text-lg font-bold">Process Payment</h3>
-                            <p className="text-[#a29bfe]/50 text-xs mt-1">Select installments to calculate total</p>
+                <motion.div variants={itemVariants} className="lg:col-span-4 sticky top-8">
+                    <div className="bg-white rounded-[40px] border border-gray-100 shadow-2xl overflow-hidden group/form">
+                        <div className="bg-slate-900 p-8 text-white relative h-28 flex flex-col justify-center overflow-hidden">
+                            <div className="absolute top-0 right-0 w-40 h-40 bg-[#6c5ce7] rounded-full blur-[40px] -mr-16 -mt-16 group-hover/form:scale-125 transition-transform duration-1000 opacity-70" />
+                            <div className="relative z-10">
+                                <h3 className="text-xl font-black tracking-tight text-white">Commit Funds</h3>
+                                <p className="text-[#a29bfe] text-[10px] mt-1 font-black uppercase tracking-[0.2em]">Security Protocol V2.0</p>
+                            </div>
                         </div>
-                        <div className="p-6 space-y-6">
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center pb-4 border-b border-gray-50">
-                                    <span className="text-sm text-gray-500 font-medium">Selected Installments</span>
-                                    <span className="text-sm font-bold text-gray-900">{selectedInstallments.length}</span>
+                        <div className="p-8 space-y-8">
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-center pb-6 border-b border-gray-50">
+                                    <span className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Selected Units</span>
+                                    <span className="px-4 py-1.5 bg-indigo-50 text-indigo-700 text-[10px] font-black rounded-xl uppercase tracking-widest">{selectedInstallments.length} Phases</span>
                                 </div>
-                                <div className="flex justify-between items-end">
-                                    <span className="text-sm text-gray-500 font-medium pb-1">Amount to Pay</span>
-                                    <div className="text-right">
-                                        <p className="text-xs text-[#6c5ce7] font-bold uppercase tracking-wider mb-1">Net Payable</p>
-                                        <p className="text-3xl font-black text-gray-900 tracking-tighter">₹{paymentForm.amount_paid.toLocaleString()}</p>
-                                    </div>
+                                <div className="flex flex-col gap-2">
+                                    <span className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Aggregate Total Value</span>
+                                    <p className="text-5xl font-black text-gray-900 tracking-tighter group-hover/form:text-indigo-600 transition-colors duration-500">₹{paymentForm.amount_paid.toLocaleString()}</p>
                                 </div>
                             </div>
 
-                            <div className="space-y-4 pt-4 border-t border-gray-50">
+                            <div className="space-y-6 pt-8 border-t border-gray-50">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Payment Mode</label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {['cash', 'online', 'cheque', 'bank'].map(mode => (
+                                    <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 ml-1">
+                                        <CreditCard size={12} className="text-indigo-600" />
+                                        Payment Vector
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {['cash', 'cheque', 'bank', 'dd'].map(mode => (
                                             <button
                                                 key={mode}
                                                 onClick={() => setPaymentForm({ ...paymentForm, payment_mode: mode })}
-                                                className={`py-2 px-3 rounded-xl border text-[11px] font-bold uppercase tracking-wider transition-all
-                                                    ${paymentForm.payment_mode === mode ? 'bg-gray-900 text-white border-gray-900 shadow-md' : 'bg-white text-gray-500 border-gray-100 hover:border-[#6c5ce7]/20'}`}
+                                                className={`py-3.5 px-3 rounded-[20px] border text-[10px] font-black uppercase tracking-widest transition-all duration-300
+                                                    ${paymentForm.payment_mode === mode ? 'bg-[#6c5ce7] text-white border-[#6c5ce7] shadow-xl shadow-[#6c5ce7]/20 scale-105' : 'bg-slate-50 text-slate-400 border-transparent hover:border-[#6c5ce7]/30 hover:text-[#6c5ce7] hover:bg-white'}`}
                                             >
                                                 {mode}
                                             </button>
@@ -270,21 +328,27 @@ export default function FeePaymentPage() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1 text-red-500">Receipt Number</label>
+                                    <label className="flex items-center gap-2 text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] mb-4 ml-1">
+                                        <FileText size={12} />
+                                        Registry Receipt
+                                    </label>
                                     <input
                                         type="text"
                                         readOnly
-                                        className="w-full px-4 py-2.5 bg-gray-50 border border-transparent rounded-xl text-sm font-mono text-gray-900 focus:bg-white focus:border-[#6c5ce7] transition-all outline-none"
+                                        className="w-full px-6 py-5 bg-gray-50 border border-transparent rounded-[24px] text-sm font-black font-mono text-gray-900 outline-none ring-1 ring-gray-100 focus:ring-rose-100 transition-all"
                                         value={paymentForm.receipt_no}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Notes / Remarks</label>
+                                    <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 ml-1">
+                                        <Info size={12} className="text-indigo-600" />
+                                        Protocol Notes
+                                    </label>
                                     <textarea
                                         rows={3}
-                                        className="w-full px-4 py-2.5 bg-gray-50 border border-transparent rounded-xl text-sm text-gray-900 focus:bg-white focus:border-[#6c5ce7] transition-all outline-none resize-none"
-                                        placeholder="Add any internal payment notes..."
+                                        className="w-full px-6 py-5 bg-gray-50 border border-transparent rounded-[24px] text-sm text-gray-900 focus:bg-white focus:ring-1 focus:ring-indigo-100 transition-all outline-none resize-none font-medium placeholder:text-gray-300"
+                                        placeholder="Add encrypted remarks…"
                                         value={paymentForm.notes}
                                         onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })}
                                     />
@@ -295,36 +359,38 @@ export default function FeePaymentPage() {
                                 disabled={selectedInstallments.length === 0 || loading || !selectedStudent}
                                 onClick={handlePay}
                                 className={`
-                                    w-full py-4 rounded-2xl text-sm font-bold uppercase tracking-widest shadow-lg transition-all flex items-center justify-center gap-2
+                                    w-full py-6 rounded-[28px] text-[10px] font-black uppercase tracking-[0.3em] shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95
                                     ${selectedInstallments.length > 0 && selectedStudent
-                                        ? 'bg-[#6c5ce7] text-white hover:bg-[#5b4bd5] hover:shadow-[#6c5ce7]/15'
-                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'}
+                                        ? 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-500/20'
+                                        : 'bg-gray-100 text-gray-300 cursor-not-allowed shadow-none'}
                                 `}
                             >
                                 {loading ? (
-                                    <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                                    <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                                 ) : (
-                                    <>Verify & Pay ₹{paymentForm.amount_paid.toLocaleString()}</>
+                                    <>Authorize Payment ₹{paymentForm.amount_paid.toLocaleString()}</>
                                 )}
                             </button>
                         </div>
                     </div>
 
                     {/* Quick Tips */}
-                    <div className="mt-6 p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                        <div className="flex gap-3">
-                            <span className="text-xl">💡</span>
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-8 p-6 bg-indigo-50/50 rounded-[32px] border border-indigo-100">
+                        <div className="flex gap-4">
+                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0">
+                                <Zap size={18} className="text-indigo-600" />
+                            </div>
                             <div>
-                                <h4 className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Quick Note</h4>
-                                <p className="text-[10px] text-amber-700 mt-1 leading-relaxed">
-                                    Selecting multiple installments will distribute the payment across them. Receipt will be generated for the total amount.
+                                <h4 className="text-[11px] font-black text-indigo-900 uppercase tracking-widest">Protocol Insight</h4>
+                                <p className="text-[10px] text-indigo-700 mt-1.5 leading-relaxed font-medium">
+                                    Payments committed here are irreversible in real-time. Verify selected cycles and amount before processing.
                                 </p>
                             </div>
                         </div>
-                    </div>
-                </div>
+                    </motion.div>
+                </motion.div>
 
             </div>
-        </div>
+        </motion.div>
     );
 }

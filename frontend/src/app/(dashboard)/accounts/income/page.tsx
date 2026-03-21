@@ -1,197 +1,276 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '@/lib/api';
+import { api, reportApiError } from '@/lib/api';
 import type { IncomeEntry } from '@/lib/types';
+import { toast } from 'react-hot-toast';
+import { TrendingUp, Plus, X } from 'lucide-react';
 
-const CATEGORIES = ['Fee Collection', 'Transport', 'Admission', 'Exam', 'Canteen', 'Uniform/Books', 'Donation', 'Government Grant', 'Rental', 'Other'];
+const CATEGORIES = [
+    'Fee Collection', 'Transport', 'Admission', 'Exam', 'Canteen',
+    'Uniform/Books', 'Donation', 'Government Grant', 'Rental', 'Other',
+];
+
+const PAYMENT_MODES = [
+    { value: 'cash', label: 'Cash' },
+    { value: 'bank_transfer', label: 'Bank Transfer' },
+    { value: 'cheque', label: 'Cheque' },
+    { value: 'online', label: 'Online' },
+    { value: 'upi', label: 'UPI' },
+];
+
+const EMPTY_FORM = {
+    date: new Date().toISOString().split('T')[0],
+    category: 'Fee Collection',
+    amount: '',
+    payment_mode: 'cash',
+    received_from: '',
+    description: '',
+    receipt_number: '',
+};
 
 export default function IncomePage() {
     const [entries, setEntries] = useState<IncomeEntry[]>([]);
     const [summary, setSummary] = useState<{ total_amount: number } | null>(null);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
-    const [error, setError] = useState('');
-    const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], category: 'Fee Collection', amount: '', payment_mode: 'cash', received_from: '', description: '', receipt_number: '' });
+    const [submitting, setSubmitting] = useState(false);
+    const [form, setForm] = useState(EMPTY_FORM);
+
+    // Filters
+    const [filterCategory, setFilterCategory] = useState('');
+    const [filterMode, setFilterMode] = useState('');
 
     const load = useCallback(async () => {
+        setLoading(true);
         try {
             const json = await api.getIncomeEntries();
-            setEntries(json.data as IncomeEntry[] || []);
+            setEntries((json.data as IncomeEntry[]) || []);
             setSummary(json.summary ?? null);
-        }
-        catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Failed to load';
-            setError(message);
+        } catch (err) {
+            reportApiError(err);
             setEntries([]);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }, []);
 
-    useEffect(() => {
-        (async () => {
-            setLoading(true);
-            await load();
-        })();
-    }, [load]);
+    useEffect(() => { load(); }, [load]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
         e.preventDefault();
-        setError('');
+        setSubmitting(true);
         try {
             await api.createIncomeEntry({ ...form, amount: parseFloat(form.amount) });
+            toast.success('Income recorded');
             setShowForm(false);
-            setForm({ date: new Date().toISOString().split('T')[0], category: 'Fee Collection', amount: '', payment_mode: 'cash', received_from: '', description: '', receipt_number: '' });
+            setForm(EMPTY_FORM);
             load();
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Failed to save entry');
+        } finally {
+            setSubmitting(false);
         }
-        catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed to submit'); }
     };
 
+    const inputCls = 'w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-[#6c5ce7] focus:ring-2 focus:ring-[#6c5ce7]/10 outline-none rounded-lg text-sm transition-all';
+
+    const filtered = entries.filter(e =>
+        (!filterCategory || e.category === filterCategory) &&
+        (!filterMode || e.payment_mode === filterMode)
+    );
+
     return (
-        <div className="space-y-8 animate-fade-in p-2">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+        <div className="space-y-6 pb-8">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Revenue Ledger</h1>
-                    <p className="text-gray-500 text-sm mt-1.5 font-medium">Tracking all institutional income and transactions</p>
+                    <h1 className="text-2xl font-bold text-slate-900">Income</h1>
+                    <p className="text-sm text-slate-500 mt-0.5">All revenue received by the school</p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <button className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all shadow-sm">
-                        Download Statement
-                    </button>
-                    <button
-                        onClick={() => setShowForm(!showForm)}
-                        className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all shadow-md flex items-center gap-2 ${showForm ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 shadow-rose-600/5' : 'bg-[#6c5ce7] text-white hover:bg-[#5b4bd5] shadow-[#6c5ce7]/20 font-bold'
-                            }`}
-                    >
-                        {showForm ? '✕ Close Form' : '➕ Record Income'}
-                    </button>
-                </div>
+                <button
+                    onClick={() => setShowForm(!showForm)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        showForm
+                            ? 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                            : 'bg-[#6c5ce7] text-white hover:bg-[#5b4bd5]'
+                    }`}
+                >
+                    {showForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Add Income</>}
+                </button>
             </div>
 
-            {error && <div className="bg-rose-50 border border-rose-100 text-rose-600 px-5 py-3 rounded-2xl text-sm font-semibold flex items-center gap-3">
-                <span className="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center text-xs text-rose-600">✕</span>
-                {error}
-            </div>}
-
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-8 rounded-3xl text-white shadow-xl shadow-emerald-600/10">
-                    <p className="text-[10px] uppercase tracking-widest font-bold opacity-70">Total Revenue</p>
-                    <p className="text-4xl font-extrabold mt-2 tracking-tighter">₹{(summary?.total_amount || 0).toLocaleString('en-IN')}</p>
-                    <div className="mt-6 flex items-center gap-2 text-xs font-bold bg-white/10 w-fit px-3 py-1.5 rounded-full backdrop-blur-sm">
-                        <span className="text-emerald-300">↑ 14.2%</span>
-                        <span className="opacity-60">vs last month</span>
+            {/* Summary chips */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                        <TrendingUp size={14} className="text-emerald-500" />
+                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Total Income</p>
                     </div>
+                    <p className="text-2xl font-bold text-emerald-600">
+                        ₹{(summary?.total_amount || 0).toLocaleString('en-IN')}
+                    </p>
                 </div>
-                <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Transactions</p>
-                    <p className="text-3xl font-extrabold mt-2 text-gray-900">{entries.length}</p>
-                    <p className="text-xs font-medium text-gray-500 mt-2">Current billing cycle</p>
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-1">Total Entries</p>
+                    <p className="text-2xl font-bold text-slate-900">{entries.length}</p>
                 </div>
-                <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Main Source</p>
-                    <p className="text-3xl font-extrabold mt-2 text-gray-900">Fees</p>
-                    <p className="text-xs font-medium text-gray-500 mt-2">82% of total volume</p>
-                </div>
-                <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Bank Credits</p>
-                    <p className="text-3xl font-extrabold mt-2 text-gray-900">70%</p>
-                    <p className="text-xs font-medium text-gray-500 mt-2">Digital vs Cash</p>
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-1">This View</p>
+                    <p className="text-2xl font-bold text-slate-900">{filtered.length}</p>
                 </div>
             </div>
 
+            {/* Add Form */}
             {showForm && (
-                <div className="bg-white p-8 rounded-3xl border border-[#f1f0ff] shadow-xl shadow-[#6c5ce7]/5 animate-fade-in">
-                    <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-xl bg-[#f1f0ff] text-[#6c5ce7] flex items-center justify-center text-sm">💰</span>
-                        New Income Entry
-                    </h3>
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Date of Entry</label>
-                                <input className="w-full bg-gray-50 border-none rounded-xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3 px-4" type="date" required value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+                    <h3 className="font-semibold text-slate-900 mb-4">Record Income Entry</h3>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium text-slate-600">Date *</label>
+                                <input
+                                    type="date" required className={inputCls}
+                                    value={form.date}
+                                    onChange={e => setForm({ ...form, date: e.target.value })}
+                                />
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Income Category</label>
-                                <select className="w-full bg-gray-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3 px-4" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Transaction Amount</label>
-                                <input className="w-full bg-gray-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3 px-4" type="number" step="0.01" placeholder="₹ 0.00" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Payment Mode</label>
-                                <select className="w-full bg-gray-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3 px-4" value={form.payment_mode} onChange={e => setForm({ ...form, payment_mode: e.target.value })}>
-                                    <option value="cash">Cash Payment</option>
-                                    <option value="bank_transfer">Bank Transfer</option>
-                                    <option value="cheque">Cheque</option>
-                                    <option value="online">Online Gateway</option>
-                                    <option value="upi">UPI / QR Scan</option>
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium text-slate-600">Category *</label>
+                                <select className={inputCls} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+                                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                             </div>
-                            <div className="space-y-1.5 md:col-span-2">
-                                <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Received From / Entity</label>
-                                <input className="w-full bg-gray-50 border-none rounded-xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3 px-4" placeholder="Name of student or organization..." value={form.received_from} onChange={e => setForm({ ...form, received_from: e.target.value })} />
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium text-slate-600">Amount (₹) *</label>
+                                <input
+                                    type="number" step="0.01" placeholder="0.00" required className={inputCls}
+                                    value={form.amount}
+                                    onChange={e => setForm({ ...form, amount: e.target.value })}
+                                />
                             </div>
-                            <div className="space-y-1.5 md:col-span-2">
-                                <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Receipt Number / Reference</label>
-                                <input className="w-full bg-gray-50 border-none rounded-xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3 px-4" placeholder="Voucher or Receipt No..." value={form.receipt_number} onChange={e => setForm({ ...form, receipt_number: e.target.value })} />
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium text-slate-600">Payment Mode</label>
+                                <select className={inputCls} value={form.payment_mode} onChange={e => setForm({ ...form, payment_mode: e.target.value })}>
+                                    {PAYMENT_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                </select>
+                            </div>
+                            <div className="space-y-1 md:col-span-2">
+                                <label className="text-xs font-medium text-slate-600">Received From</label>
+                                <input
+                                    className={inputCls} placeholder="Student name, organisation, etc."
+                                    value={form.received_from}
+                                    onChange={e => setForm({ ...form, received_from: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-1 md:col-span-2">
+                                <label className="text-xs font-medium text-slate-600">Receipt Number</label>
+                                <input
+                                    className={inputCls} placeholder="Receipt or voucher number"
+                                    value={form.receipt_number}
+                                    onChange={e => setForm({ ...form, receipt_number: e.target.value })}
+                                />
                             </div>
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Transaction Remarks</label>
-                            <textarea className="w-full bg-gray-50 border-none rounded-2xl text-sm font-medium focus:ring-2 focus:ring-[#6c5ce7]/20 py-3 px-5 resize-none" rows={2} placeholder="Optional notes for this transaction..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+                        <div className="space-y-1">
+                            <label className="text-xs font-medium text-slate-600">Notes</label>
+                            <textarea
+                                className={`${inputCls} resize-none`} rows={2}
+                                placeholder="Optional description"
+                                value={form.description}
+                                onChange={e => setForm({ ...form, description: e.target.value })}
+                            />
                         </div>
-                        <div className="flex justify-end gap-3 pt-2">
-                            <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2.5 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-50">Discard</button>
-                            <button type="submit" className="px-8 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all">Submit Entry</button>
+                        <div className="flex justify-end gap-3 pt-1 border-t border-slate-100">
+                            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700">Cancel</button>
+                            <button
+                                type="submit" disabled={submitting}
+                                className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                            >
+                                {submitting ? 'Saving...' : 'Save Entry'}
+                            </button>
                         </div>
                     </form>
                 </div>
             )}
 
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3">
+                <select
+                    value={filterCategory}
+                    onChange={e => setFilterCategory(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 outline-none focus:border-[#6c5ce7]"
+                >
+                    <option value="">All Categories</option>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select
+                    value={filterMode}
+                    onChange={e => setFilterMode(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 outline-none focus:border-[#6c5ce7]"
+                >
+                    <option value="">All Modes</option>
+                    {PAYMENT_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+                {(filterCategory || filterMode) && (
+                    <button
+                        onClick={() => { setFilterCategory(''); setFilterMode(''); }}
+                        className="px-3 py-2 text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                    >
+                        <X size={12} /> Clear
+                    </button>
+                )}
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-gray-50/50">
-                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-400">Settle Date</th>
-                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-400">Source Category</th>
-                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-400">Entity Details</th>
-                                <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-gray-400">Credit Amount</th>
-                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-400">Method</th>
-                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-gray-400">Reference</th>
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 border-b border-slate-100">
+                            <tr>
+                                <th className="px-5 py-3 text-xs font-semibold text-slate-500">Date</th>
+                                <th className="px-5 py-3 text-xs font-semibold text-slate-500">Category</th>
+                                <th className="px-5 py-3 text-xs font-semibold text-slate-500">Received From</th>
+                                <th className="px-5 py-3 text-xs font-semibold text-slate-500 text-right">Amount</th>
+                                <th className="px-5 py-3 text-xs font-semibold text-slate-500">Mode</th>
+                                <th className="px-5 py-3 text-xs font-semibold text-slate-500">Receipt No.</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {loading ? <tr><td colSpan={6} className="px-6 py-12 text-center">
-                                <div className="inline-block w-6 h-6 border-2 border-[#6c5ce7] border-t-transparent rounded-full animate-spin"></div>
-                            </td></tr>
-                                : entries.length === 0 ? <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-400 font-medium italic">No income records available</td></tr>
-                                    : entries.map(e => (
-                                        <tr key={e.id} className="hover:bg-gray-50/50 transition-colors group">
-                                            <td className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">{new Date(e.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                                            <td className="px-6 py-4">
-                                                <span className="text-sm font-bold text-gray-900 group-hover:text-[#6c5ce7] transition-colors">{e.category}</span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-semibold text-gray-700">{e.received_from || 'Direct Payment'}</span>
-                                                    <span className="text-[11px] text-gray-400 font-medium truncate max-w-[200px]">{e.description || 'No description provided'}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className="text-sm font-extrabold text-emerald-600 tracking-tight">₹{(e.amount || 0).toLocaleString('en-IN')}</span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className="inline-flex items-center px-2 py-1 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-bold uppercase tracking-wide">
-                                                    {e.payment_mode?.replace('_', ' ')}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className="text-xs font-mono font-bold text-gray-400">{e.receipt_number || 'TRX-DEFAULT'}</span>
-                                            </td>
-                                        </tr>
-                                    ))}
+                        <tbody className="divide-y divide-slate-50">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={6} className="px-5 py-12 text-center">
+                                        <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                                    </td>
+                                </tr>
+                            ) : filtered.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="px-5 py-12 text-center text-slate-400 text-sm">
+                                        No income entries found.
+                                    </td>
+                                </tr>
+                            ) : filtered.map(e => (
+                                <tr key={e.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-5 py-3.5 text-slate-600 text-xs">
+                                        {new Date(e.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                    </td>
+                                    <td className="px-5 py-3.5 font-medium text-slate-900">{e.category}</td>
+                                    <td className="px-5 py-3.5">
+                                        <p className="text-slate-800">{e.received_from || '—'}</p>
+                                        {e.description && <p className="text-xs text-slate-400 truncate max-w-[180px]">{e.description}</p>}
+                                    </td>
+                                    <td className="px-5 py-3.5 text-right font-semibold text-emerald-600">
+                                        ₹{(e.amount || 0).toLocaleString('en-IN')}
+                                    </td>
+                                    <td className="px-5 py-3.5">
+                                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs font-medium capitalize">
+                                            {PAYMENT_MODES.find(m => m.value === e.payment_mode)?.label || e.payment_mode}
+                                        </span>
+                                    </td>
+                                    <td className="px-5 py-3.5 text-xs text-slate-400 font-mono">
+                                        {e.receipt_number || '—'}
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>

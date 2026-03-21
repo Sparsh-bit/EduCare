@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { validationResult, ValidationChain } from 'express-validator';
+import { validationResult, ValidationChain, FieldValidationError } from 'express-validator';
 
 export const validate = (validations: ValidationChain[]) => {
     return async (req: Request, res: Response, next: NextFunction) => {
@@ -13,7 +13,7 @@ export const validate = (validations: ValidationChain[]) => {
         return res.status(400).json({
             error: 'Validation failed',
             details: errors.array().map((err) => ({
-                field: (err as any).path,
+                field: (err as FieldValidationError).path ?? (err as FieldValidationError).location,
                 message: err.msg,
             })),
         });

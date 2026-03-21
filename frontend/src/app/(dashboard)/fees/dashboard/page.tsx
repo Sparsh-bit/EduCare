@@ -1,132 +1,430 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
-import { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'react-hot-toast';
+import type { FeeCollectionSummary, FeeDue } from '@/lib/types';
+import { formatINR, formatINRCompact } from '@/lib/format';
+import { Landmark, TrendingUp, AlertCircle, IndianRupee, RefreshCw, Send, Bell } from 'lucide-react';
 
-export default function FeesDashboardPage() {
-    const [stats, setStats] = useState<Record<string, any> | null>(null);
-    const [loading, setLoading] = useState(true);
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-    const loadStats = async () => {
-        try {
-            const data = await api.getFeeCollectionSummary();
-            setStats(data as unknown as Record<string, any>);
-        } catch {
-            toast.error('Failed to load collections summary');
-        }
-        setLoading(false);
-    };
+interface ClassSummary {
+    class_name: string;
+    expected: number;
+    collected: number;
+    outstanding: number;
+    pct: number;
+}
 
-    useEffect(() => {
-        (async () => {
-            setLoading(true);
-            await loadStats();
-        })();
+interface PieSlice {
+    label: string;
+    value: number;
+    color: string;
+}
+
+interface BarData {
+    name: string;
+    expected: number;
+    collected: number;
+}
+
+interface StatCardProps {
+    label: string;
+    value: string;
+    icon: React.ReactNode;
+    iconBg: string;
+    iconColor: string;
+    sub?: string;
+    badge?: string;
+    badgeColor?: 'emerald' | 'rose' | 'amber' | 'indigo';
+    valueColor?: string;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+
+function getAcademicMonthIndex(): number {
+    const m = new Date().getMonth(); // 0=Jan … 11=Dec
+    return ((m - 3) + 12) % 12;     // Apr=0 … Mar=11
+}
+
+// ─── SVG Pie Chart ────────────────────────────────────────────────────────────
+
+function polarToCartesian(cx: number, cy: number, r: number, deg: number) {
+    const rad = ((deg - 90) * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function slicePath(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
+    if (endDeg - startDeg >= 360) endDeg = startDeg + 359.99;
+    const s = polarToCartesian(cx, cy, r, startDeg);
+    const e = polarToCartesian(cx, cy, r, endDeg);
+    const large = endDeg - startDeg > 180 ? 1 : 0;
+    return `M ${cx} ${cy} L ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)} Z`;
+}
+
+function PieChart({ slices }: { slices: PieSlice[] }) {
+    const total = slices.reduce((s, x) => s + x.value, 0);
+    if (total === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-40 text-slate-400 text-sm">
+                No payment data yet
+            </div>
+        );
+    }
+    const paths = slices.reduce<Array<PieSlice & { start: number; end: number }>>((acc, sl) => {
+        const start = acc.length > 0 ? acc[acc.length - 1].end : 0;
+        const span = (sl.value / total) * 360;
+        acc.push({ ...sl, start, end: start + span });
+        return acc;
     }, []);
 
-    const collectionRate = (stats?.total_expected as number) > 0
-        ? Math.round(((stats!.total_collected as number) / (stats!.total_expected as number)) * 100)
-        : 0;
-
     return (
-        <div className="p-6 space-y-8 animate-fade-in">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-                <div>
-                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-                        <span className="w-12 h-12 rounded-2xl bg-[#f1f0ff] flex items-center justify-center text-2xl shadow-sm">📊</span>
-                        Fees Analytics
-                    </h1>
-                    <p className="text-gray-500 text-sm mt-1.5 font-medium ml-1">Real-time revenue monitoring and collection tracking</p>
-                </div>
-                <div className="flex gap-3">
-                    <button onClick={loadStats} className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 hover:text-[#6c5ce7] hover:border-[#f1f0ff] transition-all shadow-sm">
-                        🔄
-                    </button>
-                    <button className="px-6 py-3 bg-[#6c5ce7] text-white rounded-2xl text-sm font-bold hover:bg-[#5b4bd5] transition-all shadow-xl shadow-[#6c5ce7]/15">
-                        Download Report
-                    </button>
-                </div>
-            </div>
-
-            {/* Quick Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {([
-                    { label: 'Total Expected', val: (stats?.total_expected as number) || 0, color: 'indigo', icon: '💰' },
-                    { label: 'Collected', val: (stats?.total_collected as number) || 0, color: 'emerald', icon: '📈' },
-                    { label: 'Outstanding', val: (stats?.pending_amount as number) || 0, color: 'rose', icon: '📉' },
-                    { label: 'Collection Rate', val: collectionRate, color: 'amber', icon: '🎯', isRate: true }
-                ] as Array<{ label: string; val: number; color: string; icon: string; isRate?: boolean }>).map((item, i) => (
-                    <div key={i} className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                        <div className={`absolute top-0 right-0 w-24 h-24 bg-${item.color}-500/5 rounded-full -mr-8 -mt-8 group-hover:scale-110 transition-transform`} />
-                        <div className="relative z-10 space-y-3">
-                            <div className="flex justify-between items-center">
-                                <span className={`w-10 h-10 rounded-xl bg-${item.color}-50 flex items-center justify-center text-lg`}>{item.icon}</span>
-                                <span className={`text-[10px] font-black uppercase tracking-widest text-${item.color}-600 bg-${item.color}-50 px-2 py-0.5 rounded-lg`}>
-                                    {item.label}
-                                </span>
-                            </div>
-                            <p className="text-2xl font-black text-gray-900 tracking-tight">
-                                {!item.isRate && '₹'}{item.isRate ? `${item.val}%` : item.val.toLocaleString('en-IN')}
-                            </p>
-                            <div className="h-1.5 w-full bg-gray-50 rounded-full overflow-hidden">
-                                <div className={`h-full bg-${item.color}-500 rounded-full transition-all duration-1000`} style={{ width: item.isRate ? `${item.val}%` : `${(item.val / ((stats?.total_expected as number) || 1)) * 100}%` }} />
-                            </div>
+        <div className="flex flex-col items-center gap-5">
+            <svg viewBox="0 0 100 100" className="w-36 h-36">
+                {paths.map((p) => (
+                    <path key={p.label} d={slicePath(50, 50, 42, p.start, p.end)} fill={p.color} />
+                ))}
+                <circle cx="50" cy="50" r="24" fill="white" />
+            </svg>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 w-full">
+                {slices.map((sl) => (
+                    <div key={sl.label} className="flex items-center gap-2 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: sl.color }} />
+                        <div className="min-w-0">
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wide">{sl.label}</p>
+                            <p className="text-xs font-semibold text-slate-900 truncate">{formatINRCompact(sl.value)}</p>
                         </div>
                     </div>
                 ))}
             </div>
+        </div>
+    );
+}
 
-            {/* Main Charts / Content Area */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Recent Collections */}
-                <div className="lg:col-span-2 bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-8 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
-                        <div>
-                            <h3 className="font-extrabold text-gray-900 tracking-tight">Recent Transactions</h3>
-                            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-widest mt-1">Live Feed • Last 5 entries</p>
+// ─── CSS Bar Chart ────────────────────────────────────────────────────────────
+
+function BarChart({ data }: { data: BarData[] }) {
+    const maxVal = Math.max(...data.map((d) => Math.max(d.expected, d.collected)), 1);
+
+    return (
+        <div className="flex items-end gap-0.5 h-44 w-full">
+            {data.map((d) => {
+                const expPct = Math.round((d.expected / maxVal) * 100);
+                const colPct = Math.round((d.collected / maxVal) * 100);
+                return (
+                    <div key={d.name} className="flex-1 flex flex-col items-center gap-1 group relative">
+                        {/* Tooltip */}
+                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-neutral-900 text-white px-3 py-2 rounded-xl text-xs whitespace-nowrap hidden group-hover:block z-10 shadow-xl pointer-events-none">
+                            <p className="font-semibold mb-0.5">{d.name}</p>
+                            <p className="text-neutral-400">Exp: {formatINRCompact(d.expected)}</p>
+                            <p className="text-indigo-300">Col: {formatINRCompact(d.collected)}</p>
                         </div>
-                        <button className="text-[10px] font-black uppercase tracking-widest text-[#6c5ce7] hover:text-[#6c5ce7]">View All →</button>
+                        <div className="flex items-end gap-px h-36 w-full justify-center">
+                            <div
+                                className="w-[46%] rounded-t-sm transition-all duration-500"
+                                style={{ height: `${expPct}%`, backgroundColor: '#e0e7ff' }}
+                            />
+                            <div
+                                className="w-[46%] rounded-t-sm transition-all duration-500"
+                                style={{ height: `${colPct}%`, backgroundColor: 'var(--color-brand-600, #4f46e5)' }}
+                            />
+                        </div>
+                        <span className="text-[9px] text-slate-400">{d.name}</span>
                     </div>
+                );
+            })}
+        </div>
+    );
+}
 
-                    <div className="flex-1 overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-50/50">
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, icon, iconBg, iconColor, sub, badge, badgeColor = 'indigo', valueColor }: StatCardProps) {
+    const badgeMap = {
+        emerald: 'bg-emerald-50 text-emerald-700',
+        rose: 'bg-rose-50 text-rose-700',
+        amber: 'bg-amber-50 text-amber-700',
+        indigo: 'bg-indigo-50 text-indigo-700',
+    } as const;
+    return (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-slate-500">{label}</span>
+                <div className={`w-8 h-8 ${iconBg} ${iconColor} rounded-lg flex items-center justify-center`}>
+                    {icon}
+                </div>
+            </div>
+            <p className={`text-2xl font-bold tabular-nums ${valueColor ?? 'text-slate-900'}`}>{value}</p>
+            {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+            {badge && (
+                <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-lg text-xs font-medium ${badgeMap[badgeColor]}`}>
+                    {badge}
+                </span>
+            )}
+        </div>
+    );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function FeesDashboardPage() {
+    const [summary, setSummary] = useState<FeeCollectionSummary | null>(null);
+    const [dues, setDues] = useState<FeeDue[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [sendingAll, setSendingAll] = useState(false);
+    const [sendingId, setSendingId] = useState<number | null>(null);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [s, d] = await Promise.all([
+                api.getFeeCollectionSummary(),
+                api.getFeeDues({ limit: '500' }),
+            ]);
+            setSummary(s);
+            setDues(d.data ?? []);
+        } catch {
+            toast.error('Failed to load fee dashboard');
+        }
+        setLoading(false);
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    // ── Derived numbers ──────────────────────────────────────────────────────
+    const totalExpected = dues.reduce((s, d) => s + Number(d.total_amount), 0);
+    const totalCollected = summary?.total_collected ?? 0;
+    const outstanding = dues.reduce((s, d) => s + Number(d.due_amount), 0);
+    const todayCollected = summary?.today_collected ?? 0;
+    const collectedPct = totalExpected > 0 ? Math.round((totalCollected / totalExpected) * 100) : 0;
+
+    // ── Monthly bar chart ────────────────────────────────────────────────────
+    const academicIdx = getAcademicMonthIndex();
+    const expectedPerMonth = totalExpected > 0 ? totalExpected / 12 : 0;
+    const perPastMonth = academicIdx > 0 ? (totalCollected - todayCollected) / academicIdx : 0;
+    const monthlyData: BarData[] = MONTHS.map((name, i) => ({
+        name,
+        expected: expectedPerMonth,
+        collected: i < academicIdx ? perPastMonth : i === academicIdx ? todayCollected : 0,
+    }));
+
+    // ── Payment mode pie ─────────────────────────────────────────────────────
+    const cashAmt = summary?.cash_collected ?? 0;
+    const onlineAmt = summary?.online_collected ?? 0;
+    const chequeAmt = Math.max(0, totalCollected - cashAmt - onlineAmt);
+    const rawSlices: PieSlice[] = [
+        { label: 'Cash', value: cashAmt, color: 'var(--color-brand-600, #4f46e5)' },
+        { label: 'Online / UPI', value: onlineAmt, color: '#10b981' },
+        { label: 'Cheque / DD', value: chequeAmt, color: '#f59e0b' },
+    ];
+    const pieSlices = rawSlices.filter((s) => s.value > 0);
+
+    // ── Class-wise table ─────────────────────────────────────────────────────
+    const classMap = new Map<string, ClassSummary>();
+    dues.forEach((d) => {
+        const key = d.class_name || 'Unknown';
+        const row = classMap.get(key) ?? { class_name: key, expected: 0, collected: 0, outstanding: 0, pct: 0 };
+        row.expected += Number(d.total_amount);
+        row.collected += Number(d.total_paid);
+        row.outstanding += Number(d.due_amount);
+        classMap.set(key, row);
+    });
+    const classSummaries: ClassSummary[] = [...classMap.values()]
+        .map((r) => ({ ...r, pct: r.expected > 0 ? Math.round((r.collected / r.expected) * 100) : 0 }))
+        .sort((a, b) => b.outstanding - a.outstanding);
+
+    // ── Top defaulters ───────────────────────────────────────────────────────
+    const defaulters = [...dues]
+        .filter((d) => Number(d.due_amount) > 0)
+        .sort((a, b) => Number(b.due_amount) - Number(a.due_amount))
+        .slice(0, 10);
+
+    // ── Reminder handlers ────────────────────────────────────────────────────
+    const sendReminder = async (studentId: number) => {
+        setSendingId(studentId);
+        try {
+            await api.sendFeeReminders([studentId]);
+            toast.success('Reminder sent');
+        } catch {
+            toast.error('Failed to send reminder');
+        }
+        setSendingId(null);
+    };
+
+    const sendAllReminders = async () => {
+        setSendingAll(true);
+        try {
+            await api.sendFeeReminders();
+            toast.success('Reminders sent to all defaulters');
+        } catch {
+            toast.error('Failed to send reminders');
+        }
+        setSendingAll(false);
+    };
+
+    // ── Loading skeleton ─────────────────────────────────────────────────────
+    if (loading) {
+        return (
+            <div className="space-y-6 animate-pulse">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {Array(4).fill(0).map((_, i) => <div key={i} className="h-28 bg-slate-100 rounded-xl" />)}
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 h-72 bg-slate-100 rounded-xl" />
+                    <div className="h-72 bg-slate-100 rounded-xl" />
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="h-64 bg-slate-100 rounded-xl" />
+                    <div className="h-64 bg-slate-100 rounded-xl" />
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6 pb-12">
+
+            {/* ── Header ── */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900">Fee Dashboard</h1>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                        {summary?.academic_year ?? '—'} · {summary?.total_students ?? 0} students enrolled
+                    </p>
+                </div>
+                <button
+                    onClick={load}
+                    className="flex items-center gap-2 border border-slate-200 text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-50 text-sm transition-colors"
+                >
+                    <RefreshCw size={14} />
+                    Refresh
+                </button>
+            </div>
+
+            {/* ── Row 1: Stat Cards ── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard
+                    label="Total Expected"
+                    value={formatINR(totalExpected)}
+                    icon={<Landmark size={16} />}
+                    iconBg="bg-slate-100"
+                    iconColor="text-slate-600"
+                    sub={`${summary?.total_students ?? 0} students`}
+                />
+                <StatCard
+                    label="Total Collected"
+                    value={formatINR(totalCollected)}
+                    icon={<TrendingUp size={16} />}
+                    iconBg="bg-emerald-50"
+                    iconColor="text-emerald-600"
+                    badge={`${collectedPct}% of expected`}
+                    badgeColor="emerald"
+                />
+                <StatCard
+                    label="Outstanding Dues"
+                    value={formatINR(outstanding)}
+                    icon={<AlertCircle size={16} />}
+                    iconBg="bg-rose-50"
+                    iconColor="text-rose-600"
+                    sub={`${defaulters.length} student${defaulters.length !== 1 ? 's' : ''} pending`}
+                    valueColor="text-rose-600"
+                />
+                <StatCard
+                    label="Today's Collection"
+                    value={formatINR(todayCollected)}
+                    icon={<IndianRupee size={16} />}
+                    iconBg="bg-indigo-50"
+                    iconColor="text-indigo-600"
+                    sub="Cash + Online"
+                />
+            </div>
+
+            {/* ── Row 2: Charts ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* Monthly Bar Chart */}
+                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+                    <div className="flex items-center justify-between mb-5">
+                        <div>
+                            <h3 className="font-semibold text-slate-900 text-sm">Monthly Collection</h3>
+                            <p className="text-xs text-slate-400 mt-0.5">Collected vs Expected · Apr–Mar</p>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-slate-500">
+                            <span className="flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-indigo-100" />
+                                Expected
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: 'var(--color-brand-600, #4f46e5)' }} />
+                                Collected
+                            </span>
+                        </div>
+                    </div>
+                    <BarChart data={monthlyData} />
+                </div>
+
+                {/* Payment Mode Pie */}
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm">Payment Mode</h3>
+                    <p className="text-xs text-slate-400 mt-0.5 mb-5">Breakdown by collection type</p>
+                    <PieChart
+                        slices={pieSlices.length > 0
+                            ? pieSlices
+                            : [{ label: 'Cash', value: 1, color: 'var(--color-brand-600, #4f46e5)' }]
+                        }
+                    />
+                </div>
+            </div>
+
+            {/* ── Row 3: Class Table + Defaulters ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                {/* Class-wise Collection */}
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100">
+                        <h3 className="font-semibold text-slate-900 text-sm">Class-wise Collection</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Sorted by outstanding (highest first)</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50 border-b border-slate-100">
                                 <tr>
-                                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Student</th>
-                                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Receipt</th>
-                                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Amount</th>
-                                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Date</th>
+                                    <th className="px-4 py-2.5 text-xs font-medium text-slate-500 text-left">Class</th>
+                                    <th className="px-4 py-2.5 text-xs font-medium text-slate-500 text-right">Expected</th>
+                                    <th className="px-4 py-2.5 text-xs font-medium text-slate-500 text-right">Collected</th>
+                                    <th className="px-4 py-2.5 text-xs font-medium text-slate-500 text-right">Outstanding</th>
+                                    <th className="px-4 py-2.5 text-xs font-medium text-slate-500 text-right w-28">%</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {loading ? (
-                                    Array(5).fill(0).map((_, i) => <tr key={i}><td colSpan={4} className="px-8 py-6 h-16 animate-pulse bg-gray-50/10" /></tr>)
-                                ) : !(stats?.recent_payments as unknown[])?.length ? (
-                                    <tr><td colSpan={4} className="p-20 text-center text-gray-400 italic">No transactions recorded yet</td></tr>
-                                ) : (stats!.recent_payments as Array<Record<string, any>>).map((p) => (
-                                    <tr key={String(p.id)} className="hover:bg-gray-50/50 transition-all group">
-                                        <td className="px-8 py-6">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 rounded-2xl bg-[#f1f0ff] text-[#6c5ce7] flex items-center justify-center font-bold text-xs">
-                                                    {(p.student_name as string)?.charAt(0)}
+                            <tbody className="divide-y divide-slate-50">
+                                {classSummaries.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} className="px-4 py-10 text-center text-slate-400 text-sm">
+                                            No data available
+                                        </td>
+                                    </tr>
+                                ) : classSummaries.map((row) => (
+                                    <tr key={row.class_name} className="hover:bg-slate-50/50 transition-colors">
+                                        <td className="px-4 py-3 font-medium text-slate-900">{row.class_name}</td>
+                                        <td className="px-4 py-3 text-right text-slate-600 tabular-nums text-xs">{formatINRCompact(row.expected)}</td>
+                                        <td className="px-4 py-3 text-right text-emerald-600 font-medium tabular-nums text-xs">{formatINRCompact(row.collected)}</td>
+                                        <td className="px-4 py-3 text-right text-rose-600 font-medium tabular-nums text-xs">{formatINRCompact(row.outstanding)}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-xs font-semibold text-slate-700">{row.pct}%</span>
+                                                <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full transition-all duration-700"
+                                                        style={{
+                                                            width: `${row.pct}%`,
+                                                            backgroundColor: 'var(--color-brand-600, #4f46e5)',
+                                                        }}
+                                                    />
                                                 </div>
-                                                <p className="font-bold text-gray-900 text-sm group-hover:text-[#6c5ce7] transition-colors">{String(p.student_name)}</p>
                                             </div>
-                                        </td>
-                                        <td className="px-8 py-6">
-                                            <span className="text-[11px] font-black text-gray-400 tracking-tighter bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100 group-hover:border-[#f1f0ff] group-hover:text-[#a29bfe] transition-all">
-                                                {String(p.receipt_no)}
-                                            </span>
-                                        </td>
-                                        <td className="px-8 py-6">
-                                            <span className="text-sm font-black text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl">
-                                                ₹{((p.amount_paid as number) || 0).toLocaleString('en-IN')}
-                                            </span>
-                                        </td>
-                                        <td className="px-8 py-6 text-right">
-                                            <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">{new Date(String(p.payment_date)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                                         </td>
                                     </tr>
                                 ))}
@@ -135,42 +433,69 @@ export default function FeesDashboardPage() {
                     </div>
                 </div>
 
-                {/* Collection Breakdown Card */}
-                <div className="bg-gradient-to-br from-[#5b4bd5] to-[#3d2e9e] rounded-[40px] p-10 text-white shadow-2xl relative overflow-hidden flex flex-col items-center justify-between min-h-[500px]">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20" />
-                    <div className="absolute bottom-0 left-0 w-48 h-48 bg-[#f1f0ff]0/10 rounded-full blur-2xl -ml-24 -mb-24" />
-
-                    <div className="w-full text-center relative z-10">
-                        <h3 className="text-lg font-black uppercase tracking-[0.2em] opacity-60">Status Overview</h3>
-                        <p className="text-xs font-bold mt-2 opacity-40">Cumulative Annual Progress</p>
-                    </div>
-
-                    <div className="relative flex items-center justify-center w-64 h-64 z-10 shrink-0">
-                        {/* Circular Progress SVG */}
-                        <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
-                            <circle cx="50" cy="50" r="45" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-white/10" />
-                            <circle cx="50" cy="50" r="45" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={`${collectionRate * 2.82} 282`} strokeLinecap="round" className="text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] transition-all duration-1000 ease-out" />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-5xl font-black">{collectionRate}%</span>
-                            <span className="text-[10px] font-black uppercase tracking-widest opacity-50 mt-1">Achieved</span>
+                {/* Top Defaulters */}
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                        <div>
+                            <h3 className="font-semibold text-slate-900 text-sm">Top Defaulters</h3>
+                            <p className="text-xs text-slate-400 mt-0.5">Highest pending dues</p>
                         </div>
-                    </div>
-
-                    <div className="w-full space-y-6 relative z-10">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-white/10 backdrop-blur-md p-4 rounded-[24px] border border-white/5">
-                                <p className="text-[10px] font-black opacity-40 uppercase tracking-widest">In Bank</p>
-                                <p className="text-lg font-black">₹{(((stats?.total_collected as number) || 0) / 100000).toFixed(1)}L</p>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-md p-4 rounded-[24px] border border-white/5">
-                                <p className="text-[10px] font-black opacity-40 uppercase tracking-widest">Deficit</p>
-                                <p className="text-lg font-black">₹{(((stats?.pending_amount as number) || 0) / 100000).toFixed(1)}L</p>
-                            </div>
-                        </div>
-                        <button className="w-full py-4 bg-white text-[#6c5ce7] rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all shadow-xl">
-                            Run Collection Drive
+                        <button
+                            onClick={sendAllReminders}
+                            disabled={sendingAll || defaulters.length === 0}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 rounded-lg text-xs font-medium transition-colors shrink-0"
+                        >
+                            {sendingAll
+                                ? <div className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                                : <Bell size={12} />
+                            }
+                            Send All Reminders
                         </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50 border-b border-slate-100">
+                                <tr>
+                                    <th className="px-4 py-2.5 text-xs font-medium text-slate-500 text-left">Student</th>
+                                    <th className="px-4 py-2.5 text-xs font-medium text-slate-500 text-right">Due Amount</th>
+                                    <th className="px-4 py-2.5 text-xs font-medium text-slate-500 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {defaulters.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={3} className="px-4 py-10 text-center text-slate-400 text-sm">
+                                            No defaulters — all dues cleared!
+                                        </td>
+                                    </tr>
+                                ) : defaulters.map((d) => (
+                                    <tr key={d.id} className="hover:bg-slate-50/50 transition-colors">
+                                        <td className="px-4 py-3">
+                                            <p className="font-medium text-slate-900 text-sm truncate max-w-[160px]">{d.name}</p>
+                                            <p className="text-xs text-slate-400">{d.class_name} · #{d.admission_no}</p>
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            <span className="font-semibold text-rose-600 tabular-nums">
+                                                {formatINR(Number(d.due_amount))}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <button
+                                                onClick={() => sendReminder(d.id)}
+                                                disabled={sendingId === d.id}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
+                                            >
+                                                {sendingId === d.id
+                                                    ? <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                                                    : <Send size={11} />
+                                                }
+                                                Remind
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>

@@ -3,11 +3,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutGrid, Users, CalendarCheck, CreditCard, FileText,
-    Wallet, Bell, LogOut, ChevronDown, ChevronRight,
+    Wallet, Bell, LogOut, ChevronRight,
     Building2, GraduationCap, MessageSquare, ClipboardList,
-    Receipt, Scale, Shield, Bot, Home, BookOpen,
+    Receipt, Scale, Shield, Lightbulb, Home, BookOpen,
+    Menu, X,
     type LucideIcon
 } from 'lucide-react';
 
@@ -33,20 +35,25 @@ const adminMenuItems: MenuItem[] = [
     {
         label: 'Students', icon: GraduationCap,
         children: [
-            { label: 'Active Students', href: '/students' },
+            { label: 'All Students', href: '/students' },
             { label: 'Add Student', href: '/students/new' },
+            { label: 'Bulk Upload', href: '/students/bulk-upload' },
+            { label: 'Promotion', href: '/students/promotion' },
+            { label: 'Withdrawal Logs', href: '/students/withdrawal' },
             { label: 'Inactive Students', href: '/students/inactive' },
-            { label: 'Certificates', href: '/students/certificates' },
-            { label: 'ID Card', href: '/students/id-card' },
-            { label: 'Student Dashboard', href: '/students/dashboard' },
+            { label: 'Transfer Certificates', href: '/students/certificates' },
+            { label: 'ID Cards', href: '/students/id-card' },
+            { label: 'Student Reports', href: '/students/dashboard' },
         ],
     },
     {
-        label: 'Human Resource', icon: Users,
+        label: 'Staff', icon: Users,
         children: [
-            { label: 'Manage Employees', href: '/staff' },
+            { label: 'All Staff', href: '/staff' },
             { label: 'Assign Teachers', href: '/hr/assign-teachers' },
-            { label: 'Staff ID Card', href: '/hr/id-card' },
+            { label: 'Leave Management', href: '/hr/leaves' },
+            { label: 'Process Payroll', href: '/hr/payroll' },
+            { label: 'Staff ID Cards', href: '/hr/id-card' },
             { label: 'HR Dashboard', href: '/hr/dashboard' },
         ],
     },
@@ -54,34 +61,34 @@ const adminMenuItems: MenuItem[] = [
         label: 'Attendance', icon: CalendarCheck,
         children: [
             { label: 'Student Attendance', href: '/attendance' },
-            { label: 'Employee Attendance', href: '/attendance/staff' },
-            { label: 'Attendance Dashboard', href: '/attendance/dashboard' },
+            { label: 'Staff Attendance', href: '/attendance/staff' },
+            { label: 'Attendance Reports', href: '/attendance/dashboard' },
         ],
     },
     {
         label: 'Communication', icon: MessageSquare,
         children: [
-            { label: 'Bulk Messages', href: '/communication/bulk' },
-            { label: 'SMS Templates', href: '/communication/templates' },
-            { label: 'Delivery Report', href: '/communication/reports' },
+            { label: 'Send Messages', href: '/communication/bulk' },
+            { label: 'Message Templates', href: '/communication/templates' },
+            { label: 'Delivery Reports', href: '/communication/reports' },
         ],
     },
     {
-        label: 'Examination', icon: ClipboardList,
+        label: 'Examinations', icon: ClipboardList,
         children: [
-            { label: 'Exam Dashboard', href: '/exams' },
+            { label: 'Exams Overview', href: '/exams' },
             { label: 'Exam Settings', href: '/exams/settings' },
-            { label: 'Report Card Entries', href: '/exams/entries' },
-            { label: 'Board Configuration', href: '/board' },
-            { label: 'Co-Scholastic Grading', href: '/board/co-scholastic' },
+            { label: 'Enter Marks', href: '/exams/entries' },
+            { label: 'Board Settings', href: '/board' },
+            { label: 'Co-Scholastic', href: '/board/co-scholastic' },
             { label: 'Generate Report Cards', href: '/board/report-cards' },
         ],
     },
     {
         label: 'Accounts', icon: Wallet,
         children: [
-            { label: 'Income Report', href: '/accounts/income' },
-            { label: 'Manage Expense', href: '/accounts/expenses' },
+            { label: 'Income', href: '/accounts/income' },
+            { label: 'Expenses', href: '/accounts/expenses' },
             { label: 'Vendor Bills', href: '/accounts/vendor-bills' },
             { label: 'Accounts Dashboard', href: '/accounts/dashboard' },
         ],
@@ -89,17 +96,17 @@ const adminMenuItems: MenuItem[] = [
     {
         label: 'Fees', icon: CreditCard,
         children: [
-            { label: 'Fee Payment', href: '/fees' },
+            { label: 'Collect Fees', href: '/fees' },
             { label: 'Fee Reports', href: '/fees/reports' },
-            { label: 'Fees Setup', href: '/fees/setup' },
-            { label: 'Fees Dashboard', href: '/fees/dashboard' },
+            { label: 'Fee Setup', href: '/fees/setup' },
+            { label: 'Fee Dashboard', href: '/fees/dashboard' },
             { label: 'Payment Instruments', href: '/payments/advanced' },
         ],
     },
     {
         label: 'Tax & Payroll', icon: Receipt,
         children: [
-            { label: 'Tax Configuration', href: '/tax' },
+            { label: 'Tax Settings', href: '/tax' },
             { label: 'Salary Structure', href: '/tax/salary-structure' },
         ],
     },
@@ -107,12 +114,12 @@ const adminMenuItems: MenuItem[] = [
         label: 'Compliance', icon: Scale,
         children: [
             { label: 'RTE Management', href: '/rte' },
-            { label: 'UDISE+ Reports', href: '/udise' },
+            { label: 'UDISE Reports', href: '/udise' },
         ],
     },
     { label: 'Notices', href: '/notices', icon: Bell },
     { label: 'Team', href: '/team', icon: Shield },
-    { label: 'AI Assistant', href: '/alerts', icon: Bot },
+    { label: 'Smart Alerts', href: '/alerts', icon: Lightbulb },
 ];
 
 const accountantMenuItems: MenuItem[] = [
@@ -120,8 +127,8 @@ const accountantMenuItems: MenuItem[] = [
     {
         label: 'Accounts', icon: Wallet,
         children: [
-            { label: 'Income Report', href: '/accounts/income' },
-            { label: 'Manage Expense', href: '/accounts/expenses' },
+            { label: 'Income', href: '/accounts/income' },
+            { label: 'Expenses', href: '/accounts/expenses' },
             { label: 'Vendor Bills', href: '/accounts/vendor-bills' },
             { label: 'Accounts Dashboard', href: '/accounts/dashboard' },
         ],
@@ -129,13 +136,15 @@ const accountantMenuItems: MenuItem[] = [
     {
         label: 'Fees', icon: CreditCard,
         children: [
-            { label: 'Fee Payment', href: '/fees' },
+            { label: 'Collect Fees', href: '/fees' },
             { label: 'Fee Reports', href: '/fees/reports' },
-            { label: 'Fees Dashboard', href: '/fees/dashboard' },
+            { label: 'Fee Dashboard', href: '/fees/dashboard' },
             { label: 'Payment Instruments', href: '/payments/advanced' },
+            { label: 'Vendor Bills', href: '/accounts/vendor-bills' },
+            { label: 'Payroll Overview', href: '/hr/payroll' },
         ],
     },
-    { label: 'AI Assistant', href: '/alerts', icon: Bot },
+    { label: 'Smart Alerts', href: '/alerts', icon: Lightbulb },
 ];
 
 const teacherMenuItems: MenuItem[] = [
@@ -146,7 +155,7 @@ const teacherMenuItems: MenuItem[] = [
     { label: 'Examinations', href: '/exams', icon: ClipboardList },
     { label: 'Co-Scholastic', href: '/board/co-scholastic', icon: FileText },
     { label: 'Notices', href: '/notices', icon: Bell },
-    { label: 'AI Assistant', href: '/alerts', icon: Bot },
+    { label: 'Smart Alerts', href: '/alerts', icon: Lightbulb },
 ];
 
 const frontDeskMenuItems: MenuItem[] = [
@@ -161,28 +170,30 @@ const frontDeskMenuItems: MenuItem[] = [
             { label: 'Lost & Found', href: '/front-desk/lost-found' },
         ],
     },
-    { label: 'AI Assistant', href: '/alerts', icon: Bot },
+    { label: 'Smart Alerts', href: '/alerts', icon: Lightbulb },
 ];
 
 const hrMenuItems: MenuItem[] = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutGrid },
     {
-        label: 'Human Resource', icon: Users,
+        label: 'Staff', icon: Users,
         children: [
-            { label: 'Manage Employees', href: '/staff' },
+            { label: 'All Staff', href: '/staff' },
             { label: 'Assign Teachers', href: '/hr/assign-teachers' },
             { label: 'HR Dashboard', href: '/hr/dashboard' },
         ],
     },
-    { label: 'Employee Attendance', href: '/attendance/staff', icon: CalendarCheck },
+    { label: 'Staff Attendance', href: '/attendance/staff', icon: CalendarCheck },
     {
         label: 'Tax & Payroll', icon: Receipt,
         children: [
             { label: 'Salary Structure', href: '/tax/salary-structure' },
-            { label: 'Process Payroll', href: '/tax' },
+            { label: 'Process Payroll', href: '/hr/payroll' },
+            { label: 'Tax Settings', href: '/tax' },
         ],
     },
-    { label: 'AI Assistant', href: '/alerts', icon: Bot },
+    { label: 'Leave Management', href: '/hr/leaves', icon: ClipboardList },
+    { label: 'Smart Alerts', href: '/alerts', icon: Lightbulb },
 ];
 
 const parentMenuItems: MenuItem[] = [
@@ -209,11 +220,11 @@ function getMenuForRole(role?: string): MenuItem[] {
 
 function getRoleBadge(role: string) {
     const map: Record<string, { label: string; cls: string }> = {
-        tenant_admin: { label: 'Tenant Admin', cls: 'bg-amber-50 text-amber-700' },
-        owner: { label: 'Admin', cls: 'bg-amber-50 text-amber-700' },
-        'co-owner': { label: 'Co-Admin', cls: 'bg-purple-50 text-purple-700' },
-        super_admin: { label: 'Super Admin', cls: 'bg-red-50 text-red-700' },
-        admin: { label: 'Admin', cls: 'bg-indigo-50 text-indigo-700' },
+        tenant_admin: { label: 'Admin', cls: 'bg-[#6c5ce7] text-white' },
+        owner: { label: 'Owner', cls: 'bg-[#6c5ce7] text-white' },
+        'co-owner': { label: 'Co-Owner', cls: 'bg-[#6c5ce7] text-white' },
+        super_admin: { label: 'Super Admin', cls: 'bg-[#6c5ce7] text-white' },
+        admin: { label: 'Admin', cls: 'bg-[#6c5ce7] text-white' },
         accountant: { label: 'Accountant', cls: 'bg-emerald-50 text-emerald-700' },
         teacher: { label: 'Teacher', cls: 'bg-blue-50 text-blue-700' },
         front_desk: { label: 'Front Desk', cls: 'bg-cyan-50 text-cyan-700' },
@@ -232,70 +243,111 @@ export default function Sidebar() {
     const badge = getRoleBadge(user?.role || '');
 
     const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/');
-    const toggleMenu = (label: string) => setOpenMenus(prev => ({ ...prev, [label]: !prev[label] }));
+    const getBestChildMatch = (children: { label: string; href: string }[]) => {
+        const matches = children
+            .filter((child) => isActive(child.href))
+            .sort((a, b) => b.href.length - a.href.length);
+        return matches[0]?.href || null;
+    };
+
+    const toggleMenu = (label: string, currentOpen: boolean) => {
+        setOpenMenus((prev) => ({ ...prev, [label]: !currentOpen }));
+    };
 
     return (
         <>
-            <button
-                onClick={() => setMobileOpen(!mobileOpen)}
-                className="lg:hidden fixed top-4 left-4 z-[60] p-2.5 bg-white rounded-xl shadow-lg border border-gray-100 text-[#6c5ce7] hover:bg-[#f1f0ff] transition-colors"
-            >
-                {mobileOpen ? '\u2715' : '\u2630'}
-            </button>
+            {/* Mobile Header */}
+            <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 px-4 flex items-center justify-between z-[60]">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-sm" style={{ background: 'linear-gradient(135deg, #6c5ce7, #8e44ad)' }}>E</div>
+                    <span className="font-bold text-gray-900">EduCare</span>
+                </div>
+                <button
+                    onClick={() => setMobileOpen(!mobileOpen)}
+                    className="p-2 bg-gray-50 rounded-xl text-gray-600 hover:bg-gray-100 transition-all"
+                >
+                    {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+                </button>
+            </div>
 
-            {mobileOpen && (
-                <div className="lg:hidden fixed inset-0 bg-black/20 backdrop-blur-sm z-40" onClick={() => setMobileOpen(false)} />
-            )}
+            {/* Mobile Overlay */}
+            <AnimatePresence>
+                {mobileOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="lg:hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50"
+                        onClick={() => setMobileOpen(false)}
+                    />
+                )}
+            </AnimatePresence>
 
-            <aside className={`fixed top-0 left-0 h-full z-50 bg-white border-r border-[#f0f1f4] w-[270px] transition-transform duration-300 ease-in-out ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'} flex flex-col`}>
-                <div className="h-[72px] flex items-center px-6 gap-3 shrink-0 border-b border-[#f0f1f4]">
-                    <div className="w-10 h-10 bg-gradient-to-br from-[#6c5ce7] to-[#8e44ad] rounded-xl flex items-center justify-center text-white font-black text-lg shadow-lg shadow-[#6c5ce7]/25">
-                        S
+            {/* Sidebar */}
+            <aside className={`fixed top-0 left-0 h-full z-[55] bg-white border-r border-gray-100 w-[260px] transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} flex flex-col`}>
+
+                {/* Brand */}
+                <div className="h-16 flex items-center px-5 gap-3 shrink-0 border-b border-gray-50">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-sm" style={{ background: 'linear-gradient(135deg, #6c5ce7, #8e44ad)' }}>
+                        E
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-lg font-black text-[#1e1e2d] tracking-tight leading-none">Schoooli</span>
-                        <span className="text-[9px] font-bold text-[#6c5ce7] tracking-[0.2em] uppercase mt-0.5">Management</span>
+                    <div>
+                        <span className="text-base font-bold text-gray-900 leading-none">EduCare ERP</span>
+                        <p className="text-xs text-gray-400 font-medium leading-none mt-0.5">by Concilio</p>
                     </div>
                 </div>
 
-                <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+                {/* Navigation */}
+                <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
                     {menuItems.map((item) => {
                         const hasChildren = item.children && item.children.length > 0;
                         const Icon = item.icon;
                         const active = !hasChildren && isActive(item.href!);
-                        const childActive = hasChildren && item.children!.some(c => isActive(c.href));
-                        const isOpen = openMenus[item.label] || childActive;
+                        const activeChildHref = hasChildren ? getBestChildMatch(item.children!) : null;
+                        const childActive = Boolean(activeChildHref);
+                        const isOpen = openMenus[item.label] ?? childActive;
 
                         if (hasChildren) {
                             return (
                                 <div key={item.label}>
                                     <button
-                                        onClick={() => toggleMenu(item.label)}
-                                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group text-left ${childActive ? 'bg-[#f1f0ff] text-[#6c5ce7]' : 'text-[#7b7e8c] hover:bg-gray-50 hover:text-[#1e1e2d]'}`}
+                                        onClick={() => toggleMenu(item.label, isOpen)}
+                                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${childActive ? 'bg-[#f1f0ff] text-[#6c5ce7] font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
                                     >
-                                        <div className={`p-1.5 rounded-lg transition-colors ${childActive ? 'bg-white shadow-sm text-[#6c5ce7]' : 'group-hover:text-[#6c5ce7]'}`}>
-                                            <Icon className="w-[18px] h-[18px]" strokeWidth={childActive ? 2.5 : 2} />
-                                        </div>
-                                        <span className="flex-1 text-[13px] font-semibold">{item.label}</span>
-                                        {isOpen ? <ChevronDown className="w-4 h-4 opacity-50" /> : <ChevronRight className="w-4 h-4 opacity-40" />}
+                                        <Icon className="w-4 h-4 shrink-0" strokeWidth={childActive ? 2.5 : 2} />
+                                        <span className="flex-1 text-[13px] font-medium text-left">{item.label}</span>
+                                        <motion.div animate={{ rotate: isOpen ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                                            <ChevronRight className="w-3.5 h-3.5 opacity-40" />
+                                        </motion.div>
                                     </button>
-                                    {isOpen && (
-                                        <div className="ml-[42px] mt-1 mb-1 space-y-0.5 border-l-2 border-[#f0f1f4] pl-3">
-                                            {item.children!.map(child => {
-                                                const cActive = isActive(child.href);
-                                                return (
-                                                    <Link
-                                                        key={child.href}
-                                                        href={child.href}
-                                                        onClick={() => setMobileOpen(false)}
-                                                        className={`block px-3 py-2 rounded-lg text-[12.5px] font-medium transition-colors ${cActive ? 'text-[#6c5ce7] bg-[#f1f0ff] font-semibold' : 'text-[#7b7e8c] hover:text-[#1e1e2d] hover:bg-gray-50'}`}
-                                                    >
-                                                        {child.label}
-                                                    </Link>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
+
+                                    <AnimatePresence initial={false}>
+                                        {isOpen && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="ml-7 pl-3 border-l border-gray-100 mt-0.5 mb-1 space-y-0.5">
+                                                    {item.children!.map(child => {
+                                                        const cActive = activeChildHref === child.href;
+                                                        return (
+                                                            <Link
+                                                                key={child.href}
+                                                                href={child.href}
+                                                                onClick={() => setMobileOpen(false)}
+                                                                className={`block px-3 py-1.5 rounded-lg text-[13px] transition-all ${cActive ? 'text-[#6c5ce7] bg-[#f1f0ff] font-semibold' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                                                            >
+                                                                {child.label}
+                                                            </Link>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                             );
                         }
@@ -305,41 +357,40 @@ export default function Sidebar() {
                                 key={item.label}
                                 href={item.href || '#'}
                                 onClick={() => setMobileOpen(false)}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${active ? 'bg-[#f1f0ff] text-[#6c5ce7]' : 'text-[#7b7e8c] hover:bg-gray-50 hover:text-[#1e1e2d]'}`}
+                                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${active ? 'bg-[#f1f0ff] text-[#6c5ce7] font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
                             >
-                                <div className={`p-1.5 rounded-lg transition-colors ${active ? 'bg-white shadow-sm text-[#6c5ce7]' : 'group-hover:text-[#6c5ce7]'}`}>
-                                    <Icon className="w-[18px] h-[18px]" strokeWidth={active ? 2.5 : 2} />
-                                </div>
-                                <span className="text-[13px] font-semibold">{item.label}</span>
-                                {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#6c5ce7]" />}
+                                <Icon className="w-4 h-4 shrink-0" strokeWidth={active ? 2.5 : 2} />
+                                <span className="text-[13px] font-medium">{item.label}</span>
                             </Link>
                         );
                     })}
                 </nav>
 
-                <div className="p-3 border-t border-[#f0f1f4] shrink-0 space-y-2">
-                    <div className="flex items-center gap-3 px-3 py-2">
-                        <div className="w-9 h-9 rounded-xl bg-[#f1f0ff] flex items-center justify-center text-[#6c5ce7] font-bold text-sm shrink-0">
+                {/* User Profile */}
+                <div className="p-3 border-t border-gray-100 shrink-0">
+                    <div className="flex items-center gap-3 px-2 py-2 mb-1">
+                        <div className="w-8 h-8 rounded-lg bg-[#f1f0ff] flex items-center justify-center text-[#6c5ce7] font-black text-sm shrink-0">
                             {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                         </div>
                         <div className="min-w-0 flex-1">
-                            <p className="text-[13px] font-semibold text-[#1e1e2d] truncate">{user?.name || 'User'}</p>
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.cls}`}>
+                            <p className="text-[13px] font-semibold text-gray-900 truncate">{user?.name || 'User'}</p>
+                            <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-md ${badge.cls}`}>
                                 {badge.label}
                             </span>
                         </div>
                     </div>
                     <button
                         onClick={logout}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-[13px] text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all font-medium"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-gray-500 hover:text-rose-600 hover:bg-rose-50 transition-all"
                     >
-                        <LogOut className="w-4 h-4" />
+                        <LogOut className="w-4 h-4" strokeWidth={2} />
                         Sign Out
                     </button>
                 </div>
             </aside>
 
-            <div className="hidden lg:block w-[270px] shrink-0" />
+            {/* Desktop Spacer */}
+            <div className="hidden lg:block w-[260px] shrink-0" />
         </>
     );
 }

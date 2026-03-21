@@ -140,7 +140,7 @@ router.get('/recent-activity', authenticate, authorize('tenant_admin', 'owner', 
             .orderBy('audit_logs.created_at', 'desc')
             .limit(20);
 
-        res.json(logs);
+        res.json({ data: logs });
     } catch (error) {
         res.status(500).json({ error: 'Internal server error' });
     }

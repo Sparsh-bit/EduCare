@@ -1,145 +1,74 @@
 'use client';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Info } from 'lucide-react';
 
 export default function InstallmentSetupPage() {
+    const router = useRouter();
+
     return (
-        <div className="p-6 bg-[#f8f9fb] min-h-screen">
-            <div className="mb-6 flex items-center text-sm text-gray-500 gap-2">
-                <span className="text-teal-600 cursor-pointer">🏠</span>
-                <span>/</span>
-                <span className="text-teal-600 cursor-pointer hover:underline">Fees Setting</span>
-                <span>/</span>
-                <span className="text-gray-900 font-medium">Installment Setup</span>
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900">Installment Setup</h1>
+                    <p className="text-sm text-slate-500 mt-0.5">Configure installment schedules for fee collection</p>
+                </div>
+                <button onClick={() => router.push('/fees/setup')} className="flex items-center gap-2 border border-slate-200 text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-50 text-sm transition-colors">
+                    <ArrowLeft size={14} />
+                    Back to Setup
+                </button>
             </div>
 
-            <div className="flex flex-col lg:flex-row gap-6">
-                {/* Add Installment Form */}
-                <div className="w-full lg:w-1/3 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="p-4 border-b border-gray-100 font-bold text-gray-800 tracking-wide text-sm bg-gray-50/50">
-                        Add Installment
-                    </div>
-                    <form className="p-5 space-y-4">
-                        <div>
-                            <label className="text-xs font-semibold text-red-500 mb-1 block">Installment Name*</label>
-                            <input
-                                type="text"
-                                placeholder="eg. Apr-Mar,Apr"
-                                className="w-full px-3 py-2 border border-gray-200 rounded text-sm text-gray-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                            />
+            <div className="flex gap-3 items-start bg-[#f1f0ff] border border-[#f1f0ff] rounded-xl p-4">
+                <Info size={16} className="text-[#6c5ce7] mt-0.5 shrink-0" />
+                <div className="text-sm text-[#4834d4]">
+                    <p className="font-medium">Installment dates are configured per class</p>
+                    <p className="mt-0.5 text-[#5b4bd5]">Go to <button onClick={() => router.push('/fees/setup/class-fees')} className="underline font-medium">Class-wise Fees</button> to set installment due dates for each class individually.</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+                    <h3 className="font-semibold text-slate-900 mb-1">Add Installment Plan</h3>
+                    <p className="text-xs text-slate-400 mb-4">Define a named installment plan for a class</p>
+
+                    <form className="space-y-4">
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-slate-600">Installment Name *</label>
+                            <input type="text" placeholder="e.g. April Installment" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-[#a29bfe] outline-none rounded-lg text-sm transition-colors" />
                         </div>
-                        <div>
-                            <label className="text-xs font-semibold text-red-500 mb-1 block">Month(s)*</label>
-                            <select className="w-full px-3 py-2 border border-gray-200 rounded text-sm text-gray-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 appearance-none bg-white">
-                                <option>Select</option>
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-slate-600">Month(s)</label>
+                            <select className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-[#a29bfe] outline-none rounded-lg text-sm transition-colors">
+                                <option value="">Select month</option>
+                                {['January','February','March','April','May','June','July','August','September','October','November','December'].map(m => (
+                                    <option key={m} value={m}>{m}</option>
+                                ))}
                             </select>
                         </div>
-                        <div>
-                            <label className="text-xs font-semibold text-red-500 mb-1 block">Due Date*</label>
-                            <input
-                                type="date"
-                                className="w-full px-3 py-2 border border-gray-200 rounded text-sm text-gray-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                            />
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-slate-600">Due Date *</label>
+                            <input type="date" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-[#a29bfe] outline-none rounded-lg text-sm transition-colors" />
                         </div>
-                        <div>
-                            <label className="text-xs font-semibold text-red-500 mb-1 block">Class Standard*</label>
-                            <select className="w-full px-3 py-2 border border-gray-200 rounded text-sm text-gray-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 appearance-none bg-white">
-                                <option>Select</option>
-                            </select>
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-slate-600">Sequence Number *</label>
+                            <input type="number" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-[#a29bfe] outline-none rounded-lg text-sm transition-colors" />
                         </div>
-                        <div>
-                            <label className="text-xs font-semibold text-red-500 mb-1 block">Sequence No.*</label>
-                            <input
-                                type="number"
-                                className="w-full px-3 py-2 border border-gray-200 rounded text-sm text-gray-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                            />
-                        </div>
-                        <div className="pt-2">
-                            <button type="submit" className="bg-teal-700 hover:bg-teal-800 text-white font-medium py-2 px-6 rounded text-sm transition-colors shadow-sm">
-                                Save
-                            </button>
-                        </div>
+                        <button type="submit" className="bg-[#6c5ce7] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#5b4bd5] transition-colors">
+                            Save
+                        </button>
                     </form>
                 </div>
 
-                {/* Installment List Table */}
-                <div className="w-full lg:w-2/3 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="p-4 border-b border-gray-100 font-bold text-gray-800 tracking-wide text-sm bg-gray-50/50">
-                        Installment List
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100">
+                        <h3 className="font-semibold text-slate-900 text-sm">Installment Plans</h3>
                     </div>
-                    <div className="p-5">
-                        <div className="flex justify-between items-center mb-4 text-sm text-gray-600">
-                            <div className="flex items-center gap-2">
-                                <span>Show</span>
-                                <select className="border border-gray-200 rounded px-2 py-1 outline-none text-gray-700">
-                                    <option>10</option>
-                                    <option>25</option>
-                                    <option>50</option>
-                                </select>
-                                <span>entries</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span>Search:</span>
-                                <input type="text" className="border border-gray-200 rounded px-2 py-1 outline-none focus:border-teal-500 w-48 text-sm" />
-                            </div>
-                        </div>
-
-                        <div className="overflow-x-auto border border-gray-100 rounded">
-                            <table className="w-full text-sm text-left whitespace-nowrap">
-                                <thead className="bg-gray-100 font-bold text-gray-800">
-                                    <tr>
-                                        <th className="px-4 py-3 border-b border-gray-200">Class Standard</th>
-                                        <th className="px-4 py-3 border-b border-gray-200">Installment Name</th>
-                                        <th className="px-4 py-3 border-b border-gray-200 text-center">Sequence No.</th>
-                                        <th className="px-4 py-3 border-b border-gray-200">Due Date</th>
-                                        <th className="px-4 py-3 border-b border-gray-200 text-center">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="text-gray-700">
-                                    {[
-                                        { class: 'Demo', name: 'JUL - APR', seq: 1, date: '2025-07-30' },
-                                        { class: 'Demo', name: 'AUG', seq: 2, date: '2025-08-15' },
-                                        { class: 'Demo', name: 'SEP - MAY', seq: 3, date: '2025-09-15' },
-                                        { class: 'Demo', name: 'OCT', seq: 4, date: '2025-10-15' },
-                                        { class: 'Demo', name: 'NOV', seq: 5, date: '2025-11-15' },
-                                        { class: 'Demo', name: 'DEC', seq: 6, date: '2025-12-15' },
-                                        { class: 'Demo', name: 'JAN - JUN', seq: 7, date: '2026-01-15' },
-                                        { class: 'Demo', name: 'FEB', seq: 8, date: '2026-02-15' },
-                                        { class: 'Demo', name: 'MAR', seq: 9, date: '2026-03-15' },
-                                        { class: 'I', name: 'JUL - APR', seq: 1, date: '2025-07-30' }
-                                    ].map((row, idx) => (
-                                        <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50/50">
-                                            <td className="px-4 py-3">{row.class}</td>
-                                            <td className="px-4 py-3 font-medium text-gray-800">{row.name}</td>
-                                            <td className="px-4 py-3 text-center">{row.seq}</td>
-                                            <td className="px-4 py-3 text-gray-600">{row.date}</td>
-                                            <td className="px-4 py-3 text-center">
-                                                <button className="bg-teal-600 hover:bg-teal-700 text-white rounded w-6 h-6 flex items-center justify-center mx-auto text-xs shadow-sm transition-colors">
-                                                    ✏️
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div className="mt-4 flex justify-between items-center text-sm text-gray-600">
-                            <div>Showing 1 to 10 of 180 entries</div>
-                            <div className="flex items-center">
-                                <button className="px-3 py-1.5 border border-gray-200 rounded-l text-gray-500 bg-white hover:bg-gray-50 transition-colors">Previous</button>
-                                <button className="px-3 py-1.5 border-y border-r border-[#1e8a8a] bg-teal-600 text-white font-medium hover:bg-teal-700 transition-colors">1</button>
-                                <button className="px-3 py-1.5 border-y border-r border-gray-200 text-[#1e8a8a] bg-white hover:bg-gray-50 transition-colors">2</button>
-                                <button className="px-3 py-1.5 border-y border-r border-gray-200 text-[#1e8a8a] bg-white hover:bg-gray-50 transition-colors">3</button>
-                                <button className="px-3 py-1.5 border-y border-r border-gray-200 text-[#1e8a8a] bg-white hover:bg-gray-50 transition-colors">4</button>
-                                <button className="px-3 py-1.5 border-y border-r border-gray-200 text-[#1e8a8a] bg-white hover:bg-gray-50 transition-colors">5</button>
-                                <span className="px-3 py-1.5 border-y border-r border-gray-200 text-gray-500 bg-white">...</span>
-                                <button className="px-3 py-1.5 border-y border-r border-gray-200 text-[#1e8a8a] bg-white hover:bg-gray-50 transition-colors">18</button>
-                                <button className="px-3 py-1.5 border-y border-r border-gray-200 rounded-r text-[#1e8a8a] bg-white hover:bg-gray-50 transition-colors">Next</button>
-                            </div>
-                        </div>
+                    <div className="p-12 text-center text-slate-400">
+                        <p className="text-sm">No installment plans configured yet.</p>
+                        <p className="text-xs mt-1">Use the form on the left to add a plan, or set due dates in Class-wise Fees.</p>
                     </div>
                 </div>
             </div>
         </div>
     );
 }
-

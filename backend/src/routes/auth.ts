@@ -5,12 +5,13 @@ import jwt from 'jsonwebtoken';
 import { body } from 'express-validator';
 import db from '../config/database';
 import { config } from '../config';
-import { authenticate, AuthRequest, authorize, ownerOnly } from '../middleware/auth';
+import { authenticate, AuthRequest, authorize, ownerOnly, invalidateUserCache } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { paramId } from '../middleware/paramValidation';
 import { createAuditLog, getClientIp } from '../utils/auditLog';
 import logger from '../config/logger';
 import { sendEmail, passwordResetEmailHtml, welcomeEmailHtml, employeeCredentialsEmailHtml, otpEmailHtml } from '../utils/email';
+import { getLockoutSeconds, recordFailure, recordSuccess, remainingAttempts } from '../middleware/loginLockout';
 
 const router = Router();
 
@@ -274,12 +275,22 @@ router.post(
         try {
             const { schoolCode, username, password } = req.body;
 
+            // ── Lockout check (before any DB work to save resources) ──
+            const lockedSecs = getLockoutSeconds(schoolCode, username);
+            if (lockedSecs > 0) {
+                return res.status(429).json({
+                    error: `Account temporarily locked due to too many failed attempts. Try again in ${lockedSecs} seconds.`,
+                    retry_after: lockedSecs,
+                });
+            }
+
             // Look up the school first to enforce tenant isolation
             const school = await db('schools')
                 .whereRaw('UPPER(school_code) = ?', [schoolCode.toUpperCase().trim()])
                 .first();
             if (!school) {
                 await bcrypt.compare(password, '$2a$12$000000000000000000000uGSHMuhzfMJOuQNbniLCPOCr6M.s/jHO');
+                recordFailure(schoolCode, username);
                 return res.status(401).json({ error: 'Invalid school code, username, or password' });
             }
 
@@ -292,13 +303,24 @@ router.post(
             if (!user) {
                 // Constant-time: perform dummy compare to prevent timing-based user enumeration
                 await bcrypt.compare(password, '$2a$12$000000000000000000000uGSHMuhzfMJOuQNbniLCPOCr6M.s/jHO');
+                recordFailure(schoolCode, username);
                 return res.status(401).json({ error: 'Invalid school code, username, or password' });
             }
 
             const validPassword = await bcrypt.compare(password, user.password_hash);
             if (!validPassword) {
-                return res.status(401).json({ error: 'Invalid school code, username, or password' });
+                const lockSecs = recordFailure(schoolCode, username);
+                const remaining = remainingAttempts(schoolCode, username);
+                const extra = lockSecs > 0
+                    ? ` Account locked for ${lockSecs} seconds.`
+                    : remaining > 0
+                        ? ` ${remaining} attempt(s) remaining before lockout.`
+                        : '';
+                return res.status(401).json({ error: `Invalid school code, username, or password.${extra}` });
             }
+
+            // ── Successful login — clear any failure counter ──
+            recordSuccess(schoolCode, username);
 
             const token = jwt.sign(
                 { id: user.id, email: user.email, role: user.role, school_id: user.school_id },
@@ -373,7 +395,7 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
         const refreshToken = req.body.refreshToken || req.cookies?.refresh_token;
         if (!refreshToken) return res.status(400).json({ error: 'Refresh token required' });
 
-        const decoded = jwt.verify(refreshToken, config.jwt.refreshSecret) as any;
+        const decoded = jwt.verify(refreshToken, config.jwt.refreshSecret) as { id: number };
         const user = await db('users').where({ id: decoded.id, is_active: true }).first();
         if (!user) return res.status(401).json({ error: 'Invalid refresh token' });
 
@@ -408,9 +430,15 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
 // ─── GET ME ───
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const user = await db('users')
-            .select('id', 'username', 'email', 'name', 'phone', 'role', 'preferred_language', 'school_id', 'email_verified', 'created_at')
-            .where({ id: req.user!.id })
+        const user = await db('users as u')
+            .leftJoin('schools as s', 'u.school_id', 's.id')
+            .select(
+                'u.id', 'u.username', 'u.email', 'u.name', 'u.phone',
+                'u.role', 'u.preferred_language', 'u.school_id',
+                'u.email_verified', 'u.created_at',
+                's.name as school_name',
+            )
+            .where({ 'u.id': req.user!.id })
             .first();
         res.json(user);
     } catch (error) {
@@ -463,10 +491,12 @@ router.post(
             if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
 
             const hash = await bcrypt.hash(newPassword, 12);
-            await db('users').where({ id: req.user!.id }).update({ password_hash: hash });
+            await db('users').where({ id: req.user!.id }).update({ password_hash: hash, refresh_token_hash: null });
+            invalidateUserCache(req.user!.id);
 
             await createAuditLog({
                 user_id: req.user!.id,
+                school_id: req.user!.school_id,
                 action: 'password_change',
                 entity_type: 'user',
                 entity_id: req.user!.id,
@@ -547,6 +577,15 @@ router.post(
                     `Welcome to ${school.name} — Your EduCare ERP Credentials`,
                     employeeCredentialsEmailHtml(school.name, name, school.school_code, username, password, role, loginUrl)
                 ).catch(() => {});
+
+                // Create a notice for the team
+                await db('notices').insert({
+                    title: 'New Team Member Joined',
+                    content: `${name} has joined the ${department} department as ${designation || role}.`,
+                    target_audience: 'admin',
+                    created_by: req.user!.id,
+                    school_id: req.user!.school_id,
+                });
             }
 
             res.status(201).json({
@@ -610,6 +649,7 @@ router.put(
                 .where({ id: req.params.userId })
                 .update({ role: req.body.role })
                 .returning('*');
+            invalidateUserCache(Number(req.params.userId));
 
             await createAuditLog({
                 user_id: req.user!.id,
@@ -620,6 +660,15 @@ router.put(
                 new_value: { role: updated.role },
                 ip_address: getClientIp(req),
                 description: `Role changed for ${updated.name}: ${targetUser.role} → ${updated.role}`,
+            });
+
+            // Notify the team about role change
+            await db('notices').insert({
+                title: 'Role Authorization Update',
+                content: `Account role for ${updated.name} has been updated to ${updated.role}.`,
+                target_audience: 'admin',
+                created_by: req.user!.id,
+                school_id: req.user!.school_id,
             });
 
             res.json({ message: 'Role updated', user: { id: updated.id, name: updated.name, role: updated.role } });
@@ -646,6 +695,7 @@ router.put(
             if (targetUser.role === 'owner') return res.status(403).json({ error: 'Cannot deactivate admin' });
 
             await db('users').where({ id: req.params.userId }).update({ is_active: false });
+            invalidateUserCache(Number(req.params.userId));
 
             await createAuditLog({
                 user_id: req.user!.id,
@@ -654,6 +704,15 @@ router.put(
                 entity_id: targetUser.id,
                 ip_address: getClientIp(req),
                 description: `Deactivated user ${targetUser.name}`,
+            });
+
+            // Create notice for security awareness
+            await db('notices').insert({
+                title: 'Security Alert: Account Deactivated',
+                content: `The account for ${targetUser.name} has been deactivated by the administrator.`,
+                target_audience: 'admin',
+                created_by: req.user!.id,
+                school_id: req.user!.school_id,
             });
 
             res.json({ message: `User ${targetUser.name} has been deactivated` });
@@ -687,6 +746,15 @@ router.put(
                 entity_id: targetUser.id,
                 ip_address: getClientIp(req),
                 description: `Reactivated user ${targetUser.name}`,
+            });
+
+            // Create notice for reactivation
+            await db('notices').insert({
+                title: 'Account Reactivated',
+                content: `The account for ${targetUser.name} has been reactivated.`,
+                target_audience: 'admin',
+                created_by: req.user!.id,
+                school_id: req.user!.school_id,
             });
 
             res.json({ message: `User ${targetUser.name} has been reactivated` });
@@ -853,7 +921,7 @@ router.post(
                 .delete();
 
             // Generate 6-digit OTP and store its hash
-            const otp = String(Math.floor(100000 + Math.random() * 900000));
+            const otp = String(crypto.randomInt(100000, 1000000));
             const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
             const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 

@@ -1,9 +1,20 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import type { Class, Section } from '@/lib/types';
 import { toast } from 'react-hot-toast';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { Users, UserPlus, X, Check, Search, Trash2, GraduationCap } from 'lucide-react';
+
+const containerVariants: Variants = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.05 } },
+};
+
+const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 12 },
+    show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } },
+};
 
 export default function AssignTeachersPage() {
     const [assignments, setAssignments] = useState<any[]>([]);
@@ -18,211 +29,261 @@ export default function AssignTeachersPage() {
         try {
             const data = await api.getClassTeachers();
             setAssignments(data || []);
-        }
-        catch {
-            toast.error('Failed to load assignments');
+        } catch {
+            toast.error('Failed to load teacher assignments');
             setAssignments([]);
         }
         setLoading(false);
     }, []);
 
-    useEffect(() => {
-        (async () => {
-            setLoading(true);
-            await load();
-        })();
-    }, [load]);
+    useEffect(() => { load(); }, [load]);
 
-    // Load classes and staff list on mount
     useEffect(() => {
         api.getClasses().then(setClasses).catch(() => setClasses([]));
         api.getStaffList({ limit: 1000 }).then(res => setStaffList(res.data || [])).catch(() => setStaffList([]));
     }, []);
 
-    // Load sections when class changes
     useEffect(() => {
         if (!form.class_id) {
-            Promise.resolve().then(() => { setSections([]); setForm(f => ({ ...f, section_id: '' })); });
+            setSections([]);
+            setForm(f => ({ ...f, section_id: '' }));
             return;
         }
-        const cid = parseInt(form.class_id);
-        api.getSections(cid).then(setSections).catch(() => setSections([]));
+        api.getSections(parseInt(form.class_id)).then(setSections).catch(() => setSections([]));
     }, [form.class_id]);
 
-    const matchedTeacher = form.emp_id.trim() 
+    const matchedTeacher = form.emp_id.trim()
         ? staffList.find(s => s.employee_id?.toLowerCase() === form.emp_id.trim().toLowerCase())
         : null;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
-        if (!matchedTeacher) return toast.error('Invalid Employee ID. No teacher found.');
-        if (!matchedTeacher.user_id) return toast.error('This staff member does not have an active user account.');
-
+        if (!matchedTeacher) return toast.error('Employee ID not found');
+        if (!matchedTeacher.user_id) return toast.error('This staff member does not have an active user account');
         try {
-            await api.assignClassTeacher(parseInt(form.section_id), {
-                teacher_id: matchedTeacher.user_id,
-            });
+            await api.assignClassTeacher(parseInt(form.section_id), { teacher_id: matchedTeacher.user_id });
             setShowForm(false);
             setForm({ emp_id: '', class_id: '', section_id: '' });
             load();
-            toast.success('Class Teacher assigned successfully');
-        }
-        catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Failed to assign class teacher');
+            toast.success('Teacher assigned successfully');
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Failed to assign teacher');
         }
     };
 
     const removeAssignment = async (sectionId: number) => {
-        if (!confirm('Are you sure you want to revoke this class teacher assignment?')) return;
+        if (!confirm('Remove this teacher from the class?')) return;
         try {
             await api.assignClassTeacher(sectionId, { teacher_id: null });
             load();
-            toast.success('Class Teacher revoked');
-        }
-        catch {
-            toast.error('Failed to revoke assignment');
+            toast.success('Teacher removed from class');
+        } catch {
+            toast.error('Failed to remove assignment');
         }
     };
 
     return (
-        <div className="p-6 space-y-8 animate-fade-in">
+        <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-                        <span className="w-12 h-12 rounded-2xl bg-[#f1f0ff] flex items-center justify-center text-2xl shadow-sm">👨‍🏫</span>
-                        Class Teacher Assignments
-                    </h1>
-                    <p className="text-gray-500 text-sm mt-1.5 font-medium ml-1">Assign primary class teachers mapped by Employee ID</p>
+                    <h1 className="text-2xl font-bold text-slate-900">Assign Teachers</h1>
+                    <p className="text-slate-500 text-sm mt-1">Assign a class teacher to each class section</p>
                 </div>
                 <button
                     onClick={() => setShowForm(!showForm)}
-                    className="flex items-center gap-2 px-6 py-3 bg-[#6c5ce7] text-white rounded-2xl text-sm font-bold hover:bg-[#6c5ce7] transition-all shadow-xl shadow-[#6c5ce7]/15"
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-sm ${showForm ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-[#6c5ce7] text-white hover:bg-[#5b4bd5]'}`}
                 >
-                    {showForm ? '✕ Close Form' : '＋ Assign Teacher'}
+                    {showForm ? <X size={16} /> : <UserPlus size={16} />}
+                    {showForm ? 'Cancel' : 'Assign Teacher'}
                 </button>
             </div>
 
-            {/* Quick Stats */}
-            {!showForm && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Mapped Sections</p>
-                        <p className="text-3xl font-black text-[#6c5ce7] mt-2">{assignments.filter(a => a.teacher_name).length}</p>
+            {/* Assignment Form */}
+            <AnimatePresence mode="wait">
+                {showForm && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0, y: -12 }}
+                        animate={{ opacity: 1, height: 'auto', y: 0 }}
+                        exit={{ opacity: 0, height: 0, y: -12 }}
+                        className="bg-white rounded-xl border border-slate-100 p-5 shadow-sm overflow-hidden"
+                    >
+                        <h3 className="text-base font-semibold text-slate-900 mb-4">Assign a Class Teacher</h3>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Employee ID */}
+                                <div className="space-y-1">
+                                    <label className="text-xs font-medium text-slate-600">Employee ID *</label>
+                                    <div className="relative">
+                                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input
+                                            required
+                                            className={`w-full pl-9 pr-3 py-2.5 bg-slate-50 border rounded-lg text-sm focus:outline-none focus:ring-2 transition-all ${matchedTeacher ? 'border-emerald-300 ring-emerald-100 bg-emerald-50 text-emerald-700' : 'border-slate-200 focus:ring-[#6c5ce7]'}`}
+                                            placeholder="EMP-XXXX"
+                                            value={form.emp_id}
+                                            onChange={e => setForm({ ...form, emp_id: e.target.value })}
+                                        />
+                                    </div>
+                                    {form.emp_id && (
+                                        <motion.div
+                                            initial={{ opacity: 0, x: -8 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            className={`flex items-center gap-1.5 text-xs font-medium ${matchedTeacher ? 'text-emerald-600' : 'text-rose-500'}`}
+                                        >
+                                            {matchedTeacher
+                                                ? <><Check size={12} strokeWidth={3} /> {matchedTeacher.name}</>
+                                                : <><X size={12} strokeWidth={3} /> No staff found with this ID</>
+                                            }
+                                        </motion.div>
+                                    )}
+                                </div>
+
+                                {/* Class */}
+                                <div className="space-y-1">
+                                    <label className="text-xs font-medium text-slate-600">Class *</label>
+                                    <select
+                                        required
+                                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#6c5ce7]"
+                                        value={form.class_id}
+                                        onChange={e => setForm({ ...form, class_id: e.target.value, section_id: '' })}
+                                    >
+                                        <option value="">Select class</option>
+                                        {classes.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Section */}
+                                <div className="space-y-1">
+                                    <label className="text-xs font-medium text-slate-600">Section *</label>
+                                    <select
+                                        required
+                                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#6c5ce7] disabled:opacity-50"
+                                        value={form.section_id}
+                                        onChange={e => setForm({ ...form, section_id: e.target.value })}
+                                        disabled={!form.class_id}
+                                    >
+                                        <option value="">{form.class_id ? 'Select section' : 'Choose class first'}</option>
+                                        {sections.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name || 'Main'}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end pt-2 border-t border-slate-50">
+                                <button
+                                    type="submit"
+                                    disabled={!matchedTeacher || !form.section_id}
+                                    className="px-5 py-2 bg-[#6c5ce7] text-white rounded-lg text-sm font-semibold hover:bg-[#5b4bd5] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                                >
+                                    Assign Teacher
+                                </button>
+                            </div>
+                        </form>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Assignments Table */}
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
+                    <div>
+                        <h3 className="text-sm font-semibold text-slate-900">Current Assignments</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Class teachers for each section</p>
+                    </div>
+                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-lg px-3 py-1.5">
+                        <Users size={14} className="text-[#6c5ce7]" />
+                        <span className="text-xs font-semibold text-slate-700">{assignments.length} sections</span>
                     </div>
                 </div>
-            )}
 
-            {/* Assignment Form */}
-            {showForm && (
-                <div className="bg-white p-10 rounded-[40px] border border-gray-100 shadow-2xl animate-in slide-in-from-top-4 duration-500 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-2 h-full bg-[#6c5ce7]" />
-                    <h3 className="text-lg font-black text-gray-900 mb-8 flex items-center gap-3">
-                        <span className="w-9 h-9 rounded-xl bg-[#f1f0ff] text-[#6c5ce7] flex items-center justify-center text-sm">📝</span>
-                        New Class Teacher Allocation
-                    </h3>
-                    <form onSubmit={handleSubmit} className="space-y-8">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Employee ID *</label>
-                                <input 
-                                    required 
-                                    className={`w-full px-5 py-4 bg-gray-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20 ${form.emp_id && matchedTeacher ? 'bg-emerald-50 text-emerald-700 focus:ring-emerald-500/20' : ''}`}
-                                    placeholder="e.g. EMP0001" 
-                                    value={form.emp_id} 
-                                    onChange={e => setForm({ ...form, emp_id: e.target.value })} 
-                                />
-                                {form.emp_id && (
-                                    <p className={`text-xs font-bold pl-1 mt-1 ${matchedTeacher ? 'text-emerald-600' : 'text-rose-500'}`}>
-                                        {matchedTeacher ? `✓ Auto-Detected: ${matchedTeacher.name}` : '✕ No active staff found with this ID'}
-                                    </p>
-                                )}
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Class *</label>
-                                <select required className="w-full px-5 py-4 bg-gray-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20" value={form.class_id} onChange={e => setForm({ ...form, class_id: e.target.value, section_id: '' })}>
-                                    <option value="">Select Class</option>
-                                    {classes.map((c) => <option key={c.id} value={c.id}>{String(c.name || '').toLowerCase().startsWith('class') ? c.name : 'Class ' + c.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Section *</label>
-                                <select required className="w-full px-5 py-4 bg-gray-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20" value={form.section_id} onChange={e => setForm({ ...form, section_id: e.target.value })} disabled={!form.class_id}>
-                                    <option value="">{form.class_id ? 'Select Section' : 'Select class first'}</option>
-                                    {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                        <div className="flex justify-end gap-4 border-t border-gray-50 pt-8">
-                            <button type="button" onClick={() => setShowForm(false)} className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-600">Cancel</button>
-                            <button type="submit" disabled={!matchedTeacher} className={`px-12 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${matchedTeacher ? 'bg-[#6c5ce7] text-white shadow-xl shadow-[#f1f0ff] hover:bg-[#6c5ce7]' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}>Assign Teacher</button>
-                        </div>
-                    </form>
-                </div>
-            )}
-
-            {/* List */}
-            <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden min-h-[400px]">
-                <div className="p-8 border-b border-gray-50 bg-gray-50/30">
-                    <h3 className="font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
-                        Class Teacher Mappings
-                        <span className="px-2 py-0.5 rounded-lg bg-[#f1f0ff] text-[#6c5ce7] text-[10px] font-black uppercase tracking-widest">Master List</span>
-                    </h3>
-                </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-gray-50/50">
-                            <tr>
-                                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Class & Section</th>
-                                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Class Teacher</th>
-                                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Actions</th>
+                        <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100">
+                                <th className="px-5 py-3 text-xs font-semibold text-slate-500">Class &amp; Section</th>
+                                <th className="px-5 py-3 text-xs font-semibold text-slate-500">Class Teacher</th>
+                                <th className="px-5 py-3 text-xs font-semibold text-slate-500 text-right">Action</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50">
+                        <tbody className="divide-y divide-slate-50">
                             {loading ? (
-                                Array(5).fill(0).map((_, i) => <tr key={i}><td colSpan={3} className="px-8 py-10 animate-pulse bg-gray-50/20" /></tr>)
+                                Array(5).fill(0).map((_, i) => (
+                                    <tr key={i} className="animate-pulse">
+                                        <td colSpan={3} className="px-5 py-4">
+                                            <div className="h-8 bg-slate-50 rounded-lg w-full" />
+                                        </td>
+                                    </tr>
+                                ))
                             ) : assignments.length === 0 ? (
-                                <tr><td colSpan={3} className="p-24 text-center text-gray-400 italic font-medium">No classes/sections found</td></tr>
-                            ) : assignments.map(a => (
-                                <tr key={a.section_id} className="hover:bg-gray-50 transition-all group">
-                                    <td className="px-8 py-6">
-                                        <div className="flex items-center gap-2">
-                                            <span className="px-3 py-1 bg-gray-100 rounded-lg text-xs font-black text-gray-600">{String(a.class_name || '').toLowerCase().startsWith('class') ? a.class_name : 'Class ' + a.class_name}</span>
-                                            <span className="text-gray-400 text-xs font-black uppercase tracking-widest">Sec {a.section_name}</span>
+                                <tr>
+                                    <td colSpan={3} className="px-5 py-12 text-center">
+                                        <GraduationCap size={32} className="text-slate-200 mx-auto mb-2" />
+                                        <p className="text-slate-400 text-sm">No assignments found.</p>
+                                    </td>
+                                </tr>
+                            ) : assignments.map((a, idx) => (
+                                <motion.tr
+                                    variants={itemVariants}
+                                    key={a.section_id || idx}
+                                    className="hover:bg-slate-50 transition-colors"
+                                >
+                                    <td className="px-5 py-3.5">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-lg bg-[#f1f0ff] text-[#6c5ce7] flex items-center justify-center text-xs font-bold shrink-0">
+                                                {idx + 1}
+                                            </div>
+                                            <div>
+                                                <span className="text-sm font-semibold text-slate-900">{a.class_name}</span>
+                                                <span className="text-slate-400 mx-1.5">·</span>
+                                                <span className="text-sm text-slate-500">Section {a.section_name || 'Main'}</span>
+                                            </div>
                                         </div>
                                     </td>
-                                    <td className="px-8 py-6">
+                                    <td className="px-5 py-3.5">
                                         {a.teacher_name ? (
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-[#f1f0ff] flex items-center justify-center text-sm font-black text-[#6c5ce7] transition-all">
+                                                <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-xs font-semibold shrink-0">
                                                     {a.teacher_name.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-gray-900 text-sm">{a.teacher_name}</p>
-                                                    <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mt-0.5">Assigned Class Teacher</p>
+                                                    <p className="text-sm font-medium text-slate-900">{a.teacher_name}</p>
+                                                    <p className="text-xs text-emerald-600 font-medium mt-0.5">Class Teacher</p>
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="text-gray-400 italic text-sm">Not Assigned</div>
+                                            <span className="text-sm text-slate-400 italic">Not assigned</span>
                                         )}
                                     </td>
-                                    <td className="px-8 py-6 text-right">
-                                        {a.teacher_name && (
+                                    <td className="px-5 py-3.5 text-right">
+                                        {a.teacher_name ? (
                                             <button
                                                 onClick={() => removeAssignment(a.section_id)}
-                                                className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                                title="Remove assignment"
                                             >
-                                                Revoke
+                                                <Trash2 size={16} />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => {
+                                                    setShowForm(true);
+                                                    setForm(f => ({ ...f, class_id: String(a.class_id), section_id: String(a.section_id) }));
+                                                }}
+                                                className="px-3 py-1.5 rounded-lg border border-[#6c5ce7]/20 text-xs font-semibold text-[#6c5ce7] hover:bg-[#f1f0ff] transition-colors"
+                                            >
+                                                Assign
                                             </button>
                                         )}
                                     </td>
-                                </tr>
+                                </motion.tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
             </div>
-        </div>
+        </motion.div>
     );
 }

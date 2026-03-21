@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { toast } from 'react-hot-toast';
+import { Tag, Trash2, ArrowLeft } from 'lucide-react';
 
 export default function FeesCategoryPage() {
     const router = useRouter();
@@ -21,14 +22,9 @@ export default function FeesCategoryPage() {
         setLoading(false);
     };
 
-    useEffect(() => {
-        (async () => {
-            setLoading(true);
-            await load();
-        })();
-    }, []);
+    useEffect(() => { load(); }, []);
 
-    const handleSave = async (e: React.FormEvent) => {
+    const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setSaving(true);
         try {
@@ -43,126 +39,117 @@ export default function FeesCategoryPage() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('Are you sure?')) return;
         try {
             await api.deleteMasterData('fee_categories', id);
-            toast.success('Deleted successfully');
+            toast.success('Category deleted');
             load();
         } catch {
-            toast.error('Failed to delete');
+            toast.error('Failed to delete category');
         }
     };
 
+    const inputCls = 'w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-[#a29bfe] outline-none rounded-lg text-sm transition-colors';
+
     return (
-        <div className="p-6 space-y-8 animate-fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-                        <span className="w-10 h-10 rounded-2xl bg-[#f1f0ff] flex items-center justify-center text-xl shadow-sm">🏷️</span>
-                        Fees Categories
-                    </h1>
-                    <p className="text-gray-500 text-sm mt-1.5 font-medium ml-1">Define types of fees collected by your institution (e.g. Tuition, Lab, Library)</p>
+                    <h1 className="text-2xl font-bold text-slate-900">Fee Categories</h1>
+                    <p className="text-sm text-slate-500 mt-0.5">Define types of fees — e.g. Tuition, Lab, Library, Activity</p>
                 </div>
-                <button
-                    onClick={() => router.push('/fees/setup')}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-100 rounded-2xl text-xs font-bold text-gray-500 hover:text-[#6c5ce7] hover:border-[#f1f0ff] transition-all shadow-sm"
-                >
-                    ⬅ Back to Setup
+                <button onClick={() => router.push('/fees/setup')} className="flex items-center gap-2 border border-slate-200 text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-50 text-sm transition-colors">
+                    <ArrowLeft size={14} />
+                    Back to Setup
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-                <div className="lg:col-span-1 bg-white rounded-3xl border border-gray-100 p-8 shadow-sm space-y-6 sticky top-8">
-                    <div>
-                        <h3 className="text-sm font-extrabold text-gray-900 uppercase tracking-widest mb-1">Add Category</h3>
-                        <p className="text-[11px] text-gray-400 font-bold">Standard fee category for ledger tracking</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                {/* Add Form */}
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6 space-y-5 sticky top-6">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-[#f1f0ff] rounded-lg flex items-center justify-center">
+                            <Tag size={16} className="text-[#6c5ce7]" />
+                        </div>
+                        <h3 className="font-semibold text-slate-900">Add Category</h3>
                     </div>
 
-                    <form onSubmit={handleSave} className="space-y-6">
-                        <div className="space-y-4">
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400 ml-1">Category Name *</label>
-                                <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                                    className="w-full bg-gray-50 border-none rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3.5 px-4" placeholder="e.g. Activity Fee" />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400 ml-1">Short Code</label>
-                                <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })}
-                                    className="w-full bg-gray-50 border-none rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3.5 px-4" placeholder="ACT-F" />
-                            </div>
-
-                            <div className="flex gap-4">
-                                <label className="flex-1 flex items-center gap-3 p-4 bg-gray-50 rounded-2xl cursor-pointer hover:bg-gray-100 transition-colors">
-                                    <input type="checkbox" checked={form.is_one_time} onChange={e => setForm({ ...form, is_one_time: e.target.checked })} className="w-4 h-4 rounded text-[#6c5ce7] focus:ring-[#6c5ce7]" />
-                                    <span className="text-[11px] font-bold text-gray-600 uppercase tracking-tight">One Time</span>
-                                </label>
-                                <label className="flex-1 flex items-center gap-3 p-4 bg-gray-50 rounded-2xl cursor-pointer hover:bg-gray-100 transition-colors">
-                                    <input type="checkbox" checked={form.is_refundable} onChange={e => setForm({ ...form, is_refundable: e.target.checked })} className="w-4 h-4 rounded text-[#6c5ce7] focus:ring-[#6c5ce7]" />
-                                    <span className="text-[11px] font-bold text-gray-600 uppercase tracking-tight">Refundable</span>
-                                </label>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400 ml-1">Description</label>
-                                <textarea rows={2} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-                                    className="w-full bg-gray-50 border-none rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3.5 px-4 resize-none" placeholder="Internal remarks..." />
-                            </div>
+                    <form onSubmit={handleSave} className="space-y-4">
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-slate-600">Category Name *</label>
+                            <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} placeholder="e.g. Activity Fee" />
                         </div>
-
-                        <button type="submit" disabled={saving} className="w-full bg-[#6c5ce7] text-white rounded-2xl text-sm font-bold py-4 shadow-xl shadow-[#6c5ce7]/10 hover:bg-[#5b4bd5] transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                            {saving ? 'Processing...' : 'Create Category'}
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-slate-600">Short Code</label>
+                            <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} className={inputCls} placeholder="e.g. ACT-F" />
+                        </div>
+                        <div className="flex gap-3">
+                            <label className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors border border-slate-200">
+                                <input type="checkbox" checked={form.is_one_time} onChange={e => setForm({ ...form, is_one_time: e.target.checked })} className="w-4 h-4 accent-[#6c5ce7]" />
+                                <span className="text-sm text-slate-600">One time</span>
+                            </label>
+                            <label className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors border border-slate-200">
+                                <input type="checkbox" checked={form.is_refundable} onChange={e => setForm({ ...form, is_refundable: e.target.checked })} className="w-4 h-4 accent-[#6c5ce7]" />
+                                <span className="text-sm text-slate-600">Refundable</span>
+                            </label>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-slate-600">Description</label>
+                            <textarea rows={2} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className={`${inputCls} resize-none`} placeholder="Optional notes..." />
+                        </div>
+                        <button type="submit" disabled={saving} className="w-full bg-[#6c5ce7] text-white py-2.5 rounded-lg text-sm font-medium hover:bg-[#5b4bd5] disabled:opacity-50 transition-colors">
+                            {saving ? 'Saving...' : 'Add Category'}
                         </button>
                     </form>
                 </div>
 
-                <div className="lg:col-span-2 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="p-8 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
-                        <div>
-                            <h3 className="font-bold text-gray-900 tracking-tight">Fee Categories Ledger</h3>
-                            <p className="text-[11px] text-gray-500 font-semibold mt-0.5">Total {categories.length} active categories found</p>
-                        </div>
+                {/* List */}
+                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100">
+                        <h3 className="font-semibold text-slate-900 text-sm">All Categories</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">{categories.length} categories defined</p>
                     </div>
-
-                    <div className="p-2 overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-50/50">
-                                <tr>
-                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Category</th>
-                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Flags</th>
-                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Action</th>
+                    <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-100">
+                            <tr>
+                                <th className="px-5 py-3 text-xs font-medium text-slate-500 text-left">Category</th>
+                                <th className="px-5 py-3 text-xs font-medium text-slate-500 text-left">Flags</th>
+                                <th className="px-5 py-3 text-xs font-medium text-slate-500 text-right"></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {loading ? (
+                                Array(4).fill(0).map((_, i) => (
+                                    <tr key={i}><td colSpan={3} className="px-5 py-4"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td></tr>
+                                ))
+                            ) : categories.length === 0 ? (
+                                <tr><td colSpan={3} className="px-5 py-10 text-center text-slate-400 text-sm">No categories added yet</td></tr>
+                            ) : categories.map((cat, idx) => (
+                                <tr key={cat.id} className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="px-5 py-3">
+                                        <div className="flex items-center gap-3">
+                                            <span className="w-6 h-6 rounded-md bg-[#f1f0ff] text-[#6c5ce7] text-xs font-semibold flex items-center justify-center">{idx + 1}</span>
+                                            <div>
+                                                <p className="font-medium text-slate-900">{cat.name}</p>
+                                                <p className="text-xs text-slate-400">{cat.code || 'No code'}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-5 py-3">
+                                        <div className="flex gap-2">
+                                            {cat.is_one_time && <span className="px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium">One-time</span>}
+                                            {cat.is_refundable && <span className="px-2.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-medium">Refundable</span>}
+                                            {!cat.is_one_time && !cat.is_refundable && <span className="text-xs text-slate-400">Regular</span>}
+                                        </div>
+                                    </td>
+                                    <td className="px-5 py-3 text-right">
+                                        <button onClick={() => handleDelete(cat.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {loading ? (
-                                    <tr><td colSpan={3} className="p-12 text-center text-gray-300">Loading...</td></tr>
-                                ) : categories.length === 0 ? (
-                                    <tr><td colSpan={3} className="p-12 text-center text-gray-400 italic font-medium">No categories created yet</td></tr>
-                                ) : categories.map((cat, idx) => (
-                                    <tr key={cat.id} className="hover:bg-gray-50 transition-colors group">
-                                        <td className="px-6 py-5">
-                                            <div className="flex items-center gap-4">
-                                                <span className="w-8 h-8 rounded-xl bg-gray-50 text-[10px] text-gray-400 font-black flex items-center justify-center border border-transparent group-hover:bg-white group-hover:border-[#f1f0ff] group-hover:text-[#6c5ce7] transition-all">{idx + 1}</span>
-                                                <div>
-                                                    <p className="text-sm font-bold text-gray-900 group-hover:text-[#6c5ce7] transition-colors">{cat.name}</p>
-                                                    <p className="text-[10px] font-black text-gray-400 tracking-widest">{cat.code || 'NO-CODE'}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            <div className="flex gap-2">
-                                                {cat.is_one_time && <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-black uppercase">One Time</span>}
-                                                {cat.is_refundable && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase">Refundable</span>}
-                                                {!cat.is_one_time && !cat.is_refundable && <span className="text-[10px] text-gray-300 font-bold uppercase tracking-tight italic">— Regular</span>}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-5 text-right">
-                                            <button onClick={() => handleDelete(cat.id)} className="px-4 py-2 bg-rose-50 text-rose-600 text-[10px] font-black uppercase tracking-tight rounded-xl hover:bg-rose-100 opacity-60 hover:opacity-100 transition-all border border-rose-100">Remove</button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>

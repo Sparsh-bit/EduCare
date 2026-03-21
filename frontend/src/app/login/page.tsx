@@ -1,231 +1,251 @@
 'use client';
-import { useEffect, useState } from 'react';
+
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { Building2, User, Lock, Eye, EyeOff, AlertCircle, ShieldCheck } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { AuthLayout } from '@/components/auth/AuthLayout';
+
+const ERROR_MAP: Record<string, string> = {
+    INVALID_CREDENTIALS: 'Incorrect username or password. Please try again.',
+    SCHOOL_NOT_FOUND: 'School code not found. Check with your administrator.',
+    ACCOUNT_INACTIVE: 'Your account has been deactivated. Contact your administrator.',
+    ACCOUNT_LOCKED: 'Account locked due to multiple failed attempts. Try again in 15 minutes.',
+};
+
+function mapError(msg: string): string {
+    for (const [code, friendly] of Object.entries(ERROR_MAP)) {
+        if (msg.toUpperCase().includes(code)) return friendly;
+    }
+    if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('incorrect')) {
+        return ERROR_MAP.INVALID_CREDENTIALS;
+    }
+    if (msg.toLowerCase().includes('school')) return ERROR_MAP.SCHOOL_NOT_FOUND;
+    if (msg.toLowerCase().includes('locked')) return ERROR_MAP.ACCOUNT_LOCKED;
+    if (msg.toLowerCase().includes('inactive') || msg.toLowerCase().includes('deactivated')) {
+        return ERROR_MAP.ACCOUNT_INACTIVE;
+    }
+    return msg;
+}
+
+const fieldVariants = {
+    initial: { opacity: 0, y: 12 },
+    animate: (i: number) => ({
+        opacity: 1, y: 0,
+        transition: { duration: 0.35, delay: i * 0.05, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] },
+    }),
+};
+
+function Field({ label, error, children, hint, index }: {
+    label: string; error?: string; children: React.ReactNode; hint?: string; index: number;
+}) {
+    return (
+        <motion.div custom={index} variants={fieldVariants} initial="initial" animate="animate">
+            <label className="block text-sm font-medium text-neutral-700 mb-1.5">{label}</label>
+            {children}
+            {hint && !error && <p className="mt-1.5 text-xs text-neutral-500">{hint}</p>}
+            {error && (
+                <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle size={11} /> {error}
+                </p>
+            )}
+        </motion.div>
+    );
+}
 
 export default function LoginPage() {
     const [schoolCode, setSchoolCode] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [remember, setRemember] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const { login } = useAuth();
+    const failCount = useRef(0);
+    const { login, user, loading: authLoading } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
+        if (authLoading) return;
+        if (!user) return;
+        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+        const redirect = params.get('redirect');
+        if (redirect && redirect.startsWith('/')) { router.replace(redirect); return; }
+        if (user.role === 'parent') router.replace('/parent');
+        else if (user.role === 'teacher' || user.role === 'staff') router.replace('/staff/dashboard');
+        else router.replace('/dashboard');
+    }, [user, authLoading, router]);
+
+    useEffect(() => {
         const params = new URLSearchParams(window.location.search);
-        const codeFromQuery = params.get('schoolCode') || params.get('code');
-        const userFromQuery = params.get('username');
-        if (codeFromQuery) setSchoolCode(codeFromQuery);
-        if (userFromQuery) setUsername(userFromQuery);
+        const code = params.get('schoolCode') || params.get('code');
+        const usr = params.get('username');
+        if (code) setSchoolCode(code.toUpperCase());
+        if (usr) setUsername(usr);
     }, []);
+
+    const inputCls = (hasErr = false) =>
+        `w-full h-10 bg-white border rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 outline-none transition-all px-3 ${
+            hasErr
+                ? 'border-red-400 ring-1 ring-red-400/20'
+                : 'border-neutral-200 focus:border-brand-500 focus:ring-1'
+        }`;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (failCount.current >= 10) {
+            setError('Too many failed attempts. Please wait before trying again.');
+            return;
+        }
         setError('');
         setLoading(true);
         try {
-            await login(schoolCode, username, password);
-            router.push('/dashboard');
+            await login(schoolCode.trim(), username.trim(), password);
+            // redirect is handled by the useEffect above that watches user + role
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Invalid credentials');
+            failCount.current += 1;
+            const msg = err instanceof Error ? err.message : 'Sign-in failed. Please try again.';
+            setError(mapError(msg));
         } finally {
             setLoading(false);
         }
     };
 
+    if (authLoading || user) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full border-2 border-neutral-200 border-t-brand-600 animate-spin" style={{ borderTopColor: 'var(--color-brand-600)' }} />
+            </div>
+        );
+    }
+
     return (
-        <div className="min-h-screen flex bg-[#f8f9fb]">
-            {/* ─── Left: Login Form ─── */}
-            <div className="w-full lg:w-1/2 flex flex-col min-h-screen">
-                {/* Top bar */}
-                <div className="px-8 py-6 flex items-center justify-between">
-                    <Link href="/" className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-[#6c5ce7] rounded-lg flex items-center justify-center">
-                            <span className="text-[#f8f9fb] font-bold text-sm">C</span>
+        <AuthLayout>
+            <div className="w-full max-w-[400px]">
+                <div className="mb-8">
+                    <h1 className="text-2xl font-bold text-neutral-900">Welcome back</h1>
+                    <p className="text-sm text-neutral-500 mt-1">Sign in to your school&apos;s ERP dashboard</p>
+                </div>
+
+                {error && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-5 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2"
+                    >
+                        <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                        <p className="text-sm text-red-700">{error}</p>
+                    </motion.div>
+                )}
+
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                    <Field label="School Code" hint="Your school's unique code (ask your administrator)" index={0}>
+                        <div className="relative">
+                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                            <input
+                                type="text"
+                                value={schoolCode}
+                                onChange={e => setSchoolCode(e.target.value.toUpperCase())}
+                                placeholder="e.g. NDPS"
+                                required
+                                autoComplete="organization"
+                                className={`${inputCls()} pl-9 font-mono uppercase`}
+                            />
                         </div>
-                        <span className="text-[#6c5ce7] font-semibold text-lg tracking-tight">Concilio</span>
-                    </Link>
-                </div>
+                    </Field>
 
-                {/* Form area */}
-                <div className="flex-1 flex items-center justify-center px-8 pb-12">
-                    <div className="w-full max-w-sm">
-                        <h1
-                            className="text-3xl font-light text-[#6c5ce7] mb-2"
-                            style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}
-                        >
-                            Sign in to your account
-                        </h1>
-                        <p className="text-sm text-[#6c5ce7]/50 mb-8">
-                            Enter your school code, username and password
-                        </p>
+                    <Field label="Username / Phone / Email" index={1}>
+                        <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                            <input
+                                type="text"
+                                value={username}
+                                onChange={e => setUsername(e.target.value)}
+                                placeholder="Enter your username"
+                                required
+                                autoComplete="username"
+                                className={`${inputCls()} pl-9`}
+                            />
+                        </div>
+                    </Field>
 
-                        {error && (
-                            <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
-                                {error}
-                            </div>
-                        )}
-
-                        <form onSubmit={handleSubmit} className="space-y-5">
-                            <div>
-                                <input
-                                    type="text"
-                                    value={schoolCode}
-                                    onChange={(e) => setSchoolCode(e.target.value.toUpperCase())}
-                                    placeholder="School Code"
-                                    required
-                                    autoComplete="organization"
-                                    className="w-full px-4 py-3 rounded-xl text-sm bg-white/80 border border-[#6c5ce7]/12 text-[#6c5ce7] placeholder-[#6c5ce7]/40 focus:border-[#6c5ce7]/40 focus:ring-0 focus:shadow-none transition-colors tracking-widest font-semibold"
-                                    style={{ background: 'rgba(255,255,255,0.8)', color: '#6c5ce7', borderColor: 'rgba(108,92,231,0.12)', letterSpacing: '0.15em' }}
-                                />
-                            </div>
-                            <div>
-                                <input
-                                    type="text"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    placeholder="Username"
-                                    required
-                                    autoComplete="username"
-                                    className="w-full px-4 py-3 rounded-xl text-sm bg-white/80 border border-[#6c5ce7]/12 text-[#6c5ce7] placeholder-[#6c5ce7]/40 focus:border-[#6c5ce7]/40 focus:ring-0 focus:shadow-none transition-colors"
-                                    style={{ background: 'rgba(255,255,255,0.8)', color: '#6c5ce7', borderColor: 'rgba(108,92,231,0.12)' }}
-                                />
-                            </div>
-                            <div>
-                                <input
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="Password"
-                                    required
-                                    autoComplete="current-password"
-                                    className="w-full px-4 py-3 rounded-xl text-sm bg-white/80 border border-[#6c5ce7]/12 text-[#6c5ce7] placeholder-[#6c5ce7]/30 focus:border-[#6c5ce7]/40 focus:ring-0 focus:shadow-none transition-colors"
-                                    style={{ background: 'rgba(255,255,255,0.8)', color: '#6c5ce7', borderColor: 'rgba(108,92,231,0.12)' }}
-                                />
-                            </div>
+                    <Field label="Password" index={2}>
+                        <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                            <input
+                                type={showPassword ? 'text' : 'password'}
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                placeholder="Enter your password"
+                                required
+                                autoComplete="current-password"
+                                className={`${inputCls()} pl-9 pr-10`}
+                            />
                             <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full py-3 rounded-xl text-sm font-medium text-[#f8f9fb] bg-[#6c5ce7] hover:bg-[#5b4bd5] transition-colors disabled:opacity-50 tracking-wide"
+                                type="button"
+                                onClick={() => setShowPassword(v => !v)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 transition-colors"
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
                             >
-                                {loading ? 'Signing in...' : 'Sign In'}
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                             </button>
+                        </div>
+                    </Field>
 
-                            <div className="text-center">
-                                <Link
-                                    href="/forgot-password"
-                                    className="text-xs text-[#6c5ce7]/40 hover:text-[#6c5ce7]/70 transition-colors"
-                                >
-                                    Forgot your password?
-                                </Link>
-                            </div>
-                        </form>
+                    <motion.div
+                        custom={3}
+                        variants={fieldVariants}
+                        initial="initial"
+                        animate="animate"
+                        className="flex items-center justify-between"
+                    >
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={remember}
+                                onChange={e => setRemember(e.target.checked)}
+                                className="w-4 h-4 rounded border-neutral-300 accent-brand-600"
+                            />
+                            <span className="text-sm text-neutral-600">Remember me</span>
+                        </label>
+                        <Link href="/forgot-password" className="text-sm font-medium transition-colors hover:opacity-80" style={{ color: 'var(--color-brand-600)' }}>
+                            Forgot password?
+                        </Link>
+                    </motion.div>
 
-                        <p className="text-xs text-[#6c5ce7]/30 text-center mt-8">
-                            Contact your administrator for login credentials
-                        </p>
-                    </div>
-                </div>
+                    <motion.button
+                        custom={4}
+                        variants={fieldVariants}
+                        initial="initial"
+                        animate="animate"
+                        type="submit"
+                        disabled={loading}
+                        className="w-full h-11 rounded-xl text-white text-base font-semibold flex items-center justify-center gap-2 transition-opacity disabled:opacity-60 mt-1"
+                        style={{ backgroundColor: 'var(--color-brand-700)' }}
+                    >
+                        {loading ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                Signing in...
+                            </>
+                        ) : 'Sign in'}
+                    </motion.button>
+                </form>
 
-                {/* Bottom bar */}
-                <div className="px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-2 border-t border-[#6c5ce7]/8">
-                    <p className="text-xs text-[#6c5ce7]/40"
-                        style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
-                        The complete platform to manage,
-                        <br className="md:hidden" /> track, and grow your school.
-                    </p>
-                    <p className="text-xs text-[#6c5ce7]/30">
-                        © {new Date().getFullYear()} Concilio. All rights reserved.
-                    </p>
+                <p className="text-center text-sm text-neutral-500 mt-6">
+                    New school?{' '}
+                    <Link href="/signup" className="font-semibold hover:opacity-80 transition-opacity" style={{ color: 'var(--color-brand-600)' }}>
+                        Create your school →
+                    </Link>
+                </p>
+
+                <div className="mt-8 flex items-center justify-center gap-1.5 text-xs text-neutral-400">
+                    <ShieldCheck size={12} />
+                    Protected by end-to-end encryption. Your data never leaves India.
                 </div>
             </div>
-
-            {/* ─── Right: ERP Preview ─── */}
-            <div className="hidden lg:flex w-1/2 bg-[#e8e4dd] items-center justify-center p-10 relative overflow-hidden" >
-                <div className="absolute inset-0 bg-gradient-to-br from-[#e8e4dd] to-[#ddd8d0]" />
-
-                <div className="relative z-10 w-full max-w-lg">
-                    {/* Mock Dashboard */}
-                    <div className="bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-700/30">
-                        {/* Mock top bar */}
-                        <div className="h-9 bg-slate-800 flex items-center px-4 gap-2 border-b border-slate-700/50">
-                            <div className="w-3 h-3 rounded-full bg-red-400/60" />
-                            <div className="w-3 h-3 rounded-full bg-yellow-400/60" />
-                            <span className="text-[10px] text-slate-400 ml-3 tracking-wide">EduCare ERP Dashboard</span>
-                        </div>
-
-                        <div className="flex">
-                            {/* Mock sidebar */}
-                            <div className="w-14 bg-slate-800/60 border-r border-slate-700/30 py-4 flex flex-col items-center gap-3">
-                                <div className="w-7 h-7 bg-amber-500/20 rounded-lg flex items-center justify-center text-[10px]">📊</div>
-                                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] opacity-40">🎓</div>
-                                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] opacity-40">📋</div>
-                                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] opacity-40">💰</div>
-                                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] opacity-40">📝</div>
-                                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] opacity-40">👨‍🏫</div>
-                            </div>
-
-                            {/* Mock content */}
-                            <div className="flex-1 p-4 space-y-3">
-                                {/* Stat cards row */}
-                                <div className="grid grid-cols-3 gap-2">
-                                    <div className="bg-blue-500/10 rounded-lg p-2.5 border border-blue-500/10">
-                                        <p className="text-[8px] text-slate-400">Students</p>
-                                        <p className="text-sm font-bold text-white mt-0.5">847</p>
-                                    </div>
-                                    <div className="bg-emerald-500/10 rounded-lg p-2.5 border border-emerald-500/10">
-                                        <p className="text-[8px] text-slate-400">Attendance</p>
-                                        <p className="text-sm font-bold text-emerald-400 mt-0.5">94%</p>
-                                    </div>
-                                    <div className="bg-amber-500/10 rounded-lg p-2.5 border border-amber-500/10">
-                                        <p className="text-[8px] text-slate-400">Collection</p>
-                                        <p className="text-sm font-bold text-amber-400 mt-0.5">₹12.4L</p>
-                                    </div>
-                                </div>
-
-                                {/* Mock bars */}
-                                <div className="bg-slate-800/40 rounded-lg p-3 space-y-2">
-                                    <p className="text-[8px] text-slate-400 mb-2">Class-wise Enrollment</p>
-                                    {['I', 'II', 'III', 'IV', 'V', 'VI'].map((cls, i) => (
-                                        <div key={cls} className="flex items-center gap-2">
-                                            <span className="text-[8px] text-slate-500 w-4">{cls}</span>
-                                            <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full"
-                                                    style={{ width: `${60 + i * 5}%` }}
-                                                />
-                                            </div>
-                                            <span className="text-[8px] text-slate-500">{60 + i * 8}</span>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Mock table */}
-                                <div className="bg-slate-800/40 rounded-lg p-3">
-                                    <p className="text-[8px] text-slate-400 mb-2">Recent Fee Payments</p>
-                                    {['Aarav Kumar', 'Priya Gupta', 'Rohan Singh'].map((name) => (
-                                        <div key={name} className="flex items-center justify-between py-1 border-b border-slate-700/20 last:border-0">
-                                            <span className="text-[9px] text-slate-300">{name}</span>
-                                            <span className="text-[9px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">Paid</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Bottom of preview */}
-                    <div className="mt-8 flex items-center justify-center gap-6 text-[#6c5ce7]/30 text-xs font-medium">
-                        <span>EduCare</span>
-                        <span>·</span>
-                        <span>School ERP</span>
-                        <span>·</span>
-                        <span>Concilio</span>
-                    </div>
-                </div>
-            </div >
-        </div >
+        </AuthLayout>
     );
 }

@@ -1,268 +1,881 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
-import { api } from '@/lib/api';
-import type { AdmissionEnquiry } from '@/lib/types';
-import { toast } from 'react-hot-toast';
 
-const STATUS_COLORS: Record<string, string> = {
-    new: 'bg-blue-50 text-blue-600 border-blue-100',
-    contacted: 'bg-amber-50 text-amber-600 border-amber-100',
-    follow_up: 'bg-orange-50 text-orange-600 border-orange-100',
-    interested: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-    not_interested: 'bg-rose-50 text-rose-600 border-rose-100',
-    admitted: 'bg-[#f1f0ff] text-[#6c5ce7] border-[#f1f0ff]',
-    closed: 'bg-gray-50 text-gray-500 border-gray-100',
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { api, reportApiError } from '@/lib/api';
+import { AdmissionEnquiry, Class } from '@/lib/types';
+import toast from 'react-hot-toast';
+import {
+  Users,
+  Plus,
+  Search,
+  MoreVertical,
+  X,
+  Phone,
+  Calendar,
+  ArrowRight,
+  CheckCircle2,
+} from 'lucide-react';
+import Link from 'next/link';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const ALL_STATUSES = ['all', 'new', 'contacted', 'follow_up', 'interested', 'admitted', 'closed'];
+
+const STATUS_BADGE: Record<string, string> = {
+  new: 'bg-blue-50 text-blue-700',
+  contacted: 'bg-amber-50 text-amber-700',
+  follow_up: 'bg-amber-50 text-amber-700',
+  interested: 'bg-[#f1f0ff] text-[#6c5ce7]',
+  not_interested: 'bg-slate-100 text-slate-500',
+  admitted: 'bg-emerald-50 text-emerald-700',
+  closed: 'bg-slate-100 text-slate-500',
 };
 
-const SOURCE_OPTIONS = ['walkin', 'phone', 'website', 'referral', 'social_media', 'advertisement', 'other'];
-const STATUS_OPTIONS = ['new', 'contacted', 'follow_up', 'interested', 'not_interested', 'admitted', 'closed'];
+const SOURCE_OPTIONS = [
+  { value: 'walkin', label: 'Walk-in' },
+  { value: 'phone', label: 'Phone' },
+  { value: 'website', label: 'Website' },
+  { value: 'referral', label: 'Referral' },
+  { value: 'social_media', label: 'Social Media' },
+  { value: 'advertisement', label: 'Advertisement' },
+  { value: 'other', label: 'Other' },
+];
 
-export default function AdmissionEnquiryPage() {
-    const [enquiries, setEnquiries] = useState<AdmissionEnquiry[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [showForm, setShowForm] = useState(false);
-    const [filterStatus, setFilterStatus] = useState('');
-    const [search, setSearch] = useState('');
-    const [stats, setStats] = useState<Record<string, any> | null>(null);
-    const [form, setForm] = useState({
-        student_name: '', father_name: '', mother_name: '', contact_phone: '', alternate_phone: '',
-        email: '', dob: '', gender: '', class_applying_for: '', source: 'walkin', notes: '',
-        address: '', previous_school: '', follow_up_date: '', status: 'new',
+const inputCls =
+  'px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#a29bfe] transition-colors w-full';
+
+const labelCls = 'text-xs font-medium text-slate-500 block mb-1';
+
+// ─── Default form state ───────────────────────────────────────────────────────
+
+function emptyForm() {
+  return {
+    student_name: '',
+    dob: '',
+    gender: '',
+    class_applying_for: '',
+    father_name: '',
+    mother_name: '',
+    contact_phone: '',
+    alternate_phone: '',
+    email: '',
+    source: 'walkin',
+    notes: '',
+    follow_up_date: '',
+    assigned_to: '', // UI only — not sent to API
+    status: 'new',
+  };
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function EnquiryPage() {
+  // ── List state ───────────────────────────────────────────────────────────────
+  const [enquiries, setEnquiries] = useState<AdmissionEnquiry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [classes, setClasses] = useState<Class[]>([]);
+
+  // ── Filter state ─────────────────────────────────────────────────────────────
+  const [activeStatus, setActiveStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterClass, setFilterClass] = useState('');
+
+  // ── Add form state ───────────────────────────────────────────────────────────
+  const [form, setForm] = useState(emptyForm());
+  const [saving, setSaving] = useState(false);
+
+  // ── Actions dropdown ─────────────────────────────────────────────────────────
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // ── Modals ───────────────────────────────────────────────────────────────────
+  const [selectedEnquiry, setSelectedEnquiry] = useState<AdmissionEnquiry | null>(null);
+  const [changeStatusId, setChangeStatusId] = useState<number | null>(null);
+  const [changeStatusVal, setChangeStatusVal] = useState('');
+  const [changeStatusSaving, setChangeStatusSaving] = useState(false);
+  const [followUpId, setFollowUpId] = useState<number | null>(null);
+  const [followUpNote, setFollowUpNote] = useState('');
+  const [followUpStatus, setFollowUpStatus] = useState('');
+  const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpSaving, setFollowUpSaving] = useState(false);
+
+  // ── Load helpers ──────────────────────────────────────────────────────────────
+
+  const loadEnquiries = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: Record<string, string> = {};
+      if (activeStatus !== 'all') params.status = activeStatus;
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      if (filterClass) params.class_applying_for = filterClass;
+      const res = await api.getEnquiries(params);
+      setEnquiries(res.data ?? []);
+    } catch (err) {
+      reportApiError(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeStatus, searchQuery, filterClass]);
+
+  useEffect(() => {
+    loadEnquiries();
+  }, [loadEnquiries]);
+
+  useEffect(() => {
+    api
+      .getClasses()
+      .then(setClasses)
+      .catch(() => {});
+  }, []);
+
+  // ── Close dropdown on outside click ──────────────────────────────────────────
+
+  useEffect(() => {
+    function handleMouseDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, []);
+
+  // ── Form submit ───────────────────────────────────────────────────────────────
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!form.student_name.trim() || !form.father_name.trim() || !form.contact_phone.trim()) {
+      toast.error('Student name, father name, and phone are required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: Partial<AdmissionEnquiry> = {
+        student_name: form.student_name,
+        father_name: form.father_name,
+        mother_name: form.mother_name || undefined,
+        contact_phone: form.contact_phone,
+        alternate_phone: form.alternate_phone || undefined,
+        email: form.email || undefined,
+        dob: form.dob || undefined,
+        gender: form.gender || undefined,
+        class_applying_for: form.class_applying_for || undefined,
+        source: form.source,
+        notes: form.notes || undefined,
+        follow_up_date: form.follow_up_date || undefined,
+        status: form.status,
+      };
+      const result = await api.createEnquiry(payload);
+      const enqNum = (result as any).enquiry_number;
+      toast.success(enqNum ? `Enquiry ${enqNum} created!` : 'Enquiry created!');
+      setForm(emptyForm());
+      loadEnquiries();
+    } catch (err) {
+      reportApiError(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── Change status ─────────────────────────────────────────────────────────────
+
+  async function handleChangeStatus() {
+    if (!changeStatusId || !changeStatusVal) return;
+    setChangeStatusSaving(true);
+    try {
+      await api.updateEnquiry(changeStatusId, { status: changeStatusVal });
+      toast.success('Status updated.');
+      setChangeStatusId(null);
+      setChangeStatusVal('');
+      loadEnquiries();
+    } catch (err) {
+      reportApiError(err);
+    } finally {
+      setChangeStatusSaving(false);
+    }
+  }
+
+  // ── Follow-up save ────────────────────────────────────────────────────────────
+
+  async function handleFollowUpSave() {
+    if (!followUpId || !followUpNote.trim()) {
+      toast.error('Note is required.');
+      return;
+    }
+    setFollowUpSaving(true);
+    try {
+      await api.addEnquiryFollowUp(followUpId, {
+        note: followUpNote,
+        status_change: followUpStatus || undefined,
+        next_follow_up_date: followUpDate || undefined,
+      });
+      toast.success('Follow-up note saved.');
+      setFollowUpId(null);
+      setFollowUpNote('');
+      setFollowUpStatus('');
+      setFollowUpDate('');
+      loadEnquiries();
+    } catch (err) {
+      reportApiError(err);
+    } finally {
+      setFollowUpSaving(false);
+    }
+  }
+
+  // ── Delete ────────────────────────────────────────────────────────────────────
+
+  async function handleDelete(enq: AdmissionEnquiry) {
+    if (!window.confirm(`Delete enquiry for ${enq.student_name}? This cannot be undone.`)) return;
+    try {
+      await api.deleteEnquiry(enq.id);
+      toast.success('Enquiry deleted.');
+      loadEnquiries();
+    } catch (err) {
+      reportApiError(err);
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+
+  const followUpEnquiry = enquiries.find((e) => e.id === followUpId) ?? null;
+  const changeStatusEnquiry = enquiries.find((e) => e.id === changeStatusId) ?? null;
+
+  function formatDate(d?: string) {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
     });
+  }
 
-    const loadEnquiries = useCallback(async () => {
-        try {
-            const params: Record<string, string> = {};
-            if (filterStatus) params.status = filterStatus;
-            if (search) params.search = search;
-            const json = await api.getEnquiries(params);
-            setEnquiries(json.data || []);
-        } catch {
-            toast.error('Failed to load enquiries');
-        }
-        setLoading(false);
-    }, [filterStatus, search]);
+  function sourceLabel(val: string) {
+    return SOURCE_OPTIONS.find((s) => s.value === val)?.label ?? val;
+  }
 
-    const loadStats = useCallback(async () => {
-        try {
-            const data = await api.getEnquiryStats();
-            setStats(data as unknown as Record<string, any>);
-        } catch { }
-    }, []);
+  // ─── Render ───────────────────────────────────────────────────────────────────
 
-    useEffect(() => {
-        (async () => {
-            setLoading(true);
-            await loadEnquiries();
-        })();
-    }, [loadEnquiries]);
-    useEffect(() => { (async () => { await loadStats(); })(); }, [loadStats]);
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800">Admission Enquiries</h1>
+        <p className="text-sm text-slate-500 mt-0.5">Track and manage prospective student enquiries</p>
+      </div>
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            await api.createEnquiry(form);
-            setShowForm(false);
-            setForm({ student_name: '', father_name: '', mother_name: '', contact_phone: '', alternate_phone: '', email: '', dob: '', gender: '', class_applying_for: '', source: 'walkin', notes: '', address: '', previous_school: '', follow_up_date: '', status: 'new' });
-            loadEnquiries();
-            loadStats();
-            toast.success('Enquiry captured successfully');
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Failed to create enquiry');
-        }
-    };
+      {/* Two-panel layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
 
-    const updateStatus = async (id: number, status: string) => {
-        try {
-            await api.updateEnquiry(id, { status });
-            loadEnquiries();
-            loadStats();
-            toast.success(`Status updated to ${status}`);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Failed to update status');
-        }
-    };
+        {/* ── Left panel: Add Form ──────────────────────────────────────────── */}
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <Plus className="w-4 h-4 text-[#6c5ce7]" />
+              <h2 className="font-semibold text-slate-800 text-sm">New Enquiry</h2>
+            </div>
 
-    return (
-        <div className="p-6 space-y-8 animate-fade-in">
-            {/* Header Area */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+            <form onSubmit={handleSubmit} className="p-5 space-y-3">
+              {/* Student Name */}
+              <div>
+                <label className={labelCls}>Student Name *</label>
+                <input
+                  className={inputCls}
+                  placeholder="Full name"
+                  value={form.student_name}
+                  onChange={(e) => setForm({ ...form, student_name: e.target.value })}
+                  required
+                />
+              </div>
+
+              {/* DOB + Gender */}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-                        <span className="w-12 h-12 rounded-2xl bg-[#f1f0ff] flex items-center justify-center text-2xl shadow-sm">🏢</span>
-                        Front Desk Enquiry
-                    </h1>
-                    <p className="text-gray-500 text-sm mt-1.5 font-medium ml-1">Track and manage potential admissions and communication logs</p>
+                  <label className={labelCls}>Date of Birth</label>
+                  <input
+                    type="date"
+                    className={inputCls}
+                    value={form.dob}
+                    onChange={(e) => setForm({ ...form, dob: e.target.value })}
+                  />
                 </div>
-                <div className="flex items-center gap-3">
-                    <Link
-                        href="/front-desk/website-integration"
-                        className="flex items-center gap-2 px-5 py-3 border border-[#6c5ce7]/20 text-[#6c5ce7] rounded-2xl text-sm font-bold hover:bg-[#f1f0ff] transition-all"
-                    >
-                        🌐 Website Integration
-                    </Link>
-                    <button
-                        onClick={() => setShowForm(!showForm)}
-                        className="flex items-center gap-2 px-6 py-3 bg-[#6c5ce7] text-white rounded-2xl text-sm font-bold hover:bg-[#5b4bd5] transition-all shadow-xl shadow-[#6c5ce7]/15"
-                    >
-                        {showForm ? '✕ Cancel' : '＋ Capture Enquiry'}
-                    </button>
+                <div>
+                  <label className={labelCls}>Gender</label>
+                  <select
+                    className={inputCls}
+                    value={form.gender}
+                    onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                  >
+                    <option value="">Select</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
-            </div>
+              </div>
 
-            {/* Quick Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/5 rounded-full -mr-4 -mt-4" />
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] relative z-10">Total Database</p>
-                    <p className="text-3xl font-black text-gray-900 mt-2 relative z-10">{(stats?.total as number) || 0}</p>
-                </div>
-                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full -mr-4 -mt-4" />
-                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.15em] relative z-10">New Today</p>
-                    <p className="text-3xl font-black text-emerald-600 mt-2 relative z-10">{(stats?.today_new as number) || 0}</p>
-                </div>
-                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/5 rounded-full -mr-4 -mt-4" />
-                    <p className="text-[10px] font-black text-amber-400 uppercase tracking-[0.15em] relative z-10">Pending Followup</p>
-                    <p className="text-3xl font-black text-amber-600 mt-2 relative z-10">{(stats?.by_status as Array<Record<string, any>>)?.find((s) => s.status === 'follow_up')?.count as number || 0}</p>
-                </div>
-                <div className="bg-[#6c5ce7] p-6 rounded-3xl shadow-xl shadow-[#f1f0ff] relative overflow-hidden group hover:bg-[#6c5ce7] transition-all">
-                    <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full blur-xl" />
-                    <p className="text-[10px] font-black text-white/50 uppercase tracking-[0.15em] relative z-10">Conversion Rate</p>
-                    <p className="text-3xl font-black text-white mt-2 relative z-10">
-                        {(stats?.total as number) > 0 ? Math.round((((stats?.by_status as Array<Record<string, any>>)?.find((s) => s.status === 'admitted')?.count as number || 0) / (stats?.total as number)) * 100) : 0}%
-                    </p>
-                </div>
-            </div>
+              {/* Class applying for */}
+              <div>
+                <label className={labelCls}>Class Applying For</label>
+                <select
+                  className={inputCls}
+                  value={form.class_applying_for}
+                  onChange={(e) => setForm({ ...form, class_applying_for: e.target.value })}
+                >
+                  <option value="">Select class</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Entry Form */}
-            {showForm && (
-                <div className="bg-white p-10 rounded-[40px] border border-gray-100 shadow-2xl animate-in slide-in-from-top-4 duration-500 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-2 h-full bg-[#6c5ce7]" />
-                    <h3 className="text-xl font-black text-gray-900 mb-8 flex items-center gap-3">
-                        <span className="w-10 h-10 rounded-2xl bg-[#f1f0ff] flex items-center justify-center text-lg">📝</span>
-                        New Admission Enquiry Form
-                    </h3>
-                    <form onSubmit={handleSubmit} className="space-y-8">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Student Full Name *</label>
-                                <input required className="w-full px-5 py-4 bg-gray-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20" placeholder="Child's Name" value={form.student_name} onChange={e => setForm({ ...form, student_name: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Father&apos;s Name *</label>
-                                <input required className="w-full px-5 py-4 bg-gray-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20" placeholder="Parent 1" value={form.father_name} onChange={e => setForm({ ...form, father_name: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Mother&apos;s Name</label>
-                                <input className="w-full px-5 py-4 bg-gray-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20" placeholder="Parent 2" value={form.mother_name} onChange={e => setForm({ ...form, mother_name: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Primary Phone *</label>
-                                <input required className="w-full px-5 py-4 bg-gray-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20" placeholder="+91 ..." value={form.contact_phone} onChange={e => setForm({ ...form, contact_phone: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Leads Source</label>
-                                <select className="w-full px-5 py-4 bg-gray-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20 capitalize" value={form.source} onChange={e => setForm({ ...form, source: e.target.value })}>
-                                    {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Followup Date</label>
-                                <input type="date" className="w-full px-5 py-4 bg-gray-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20" value={form.follow_up_date} onChange={e => setForm({ ...form, follow_up_date: e.target.value })} />
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Additional Notes</label>
-                            <textarea className="w-full px-5 py-4 bg-gray-50 border-0 rounded-3xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20 resize-none" rows={3} placeholder="Initial conversation summary..." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-                        </div>
-                        <div className="flex justify-end gap-4 border-t border-gray-50 pt-8">
-                            <button type="button" onClick={() => setShowForm(false)} className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors">Discard</button>
-                            <button type="submit" className="px-12 py-4 bg-[#6c5ce7] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-[#6c5ce7]/10 hover:bg-[#5b4bd5] transition-all">Submit Lead</button>
-                        </div>
-                    </form>
-                </div>
-            )}
+              {/* Father Name */}
+              <div>
+                <label className={labelCls}>Father Name *</label>
+                <input
+                  className={inputCls}
+                  placeholder="Father's full name"
+                  value={form.father_name}
+                  onChange={(e) => setForm({ ...form, father_name: e.target.value })}
+                  required
+                />
+              </div>
 
-            {/* Filter Hub */}
-            <div className="flex flex-col md:flex-row gap-4 items-center justify-between p-4 bg-white rounded-3xl border border-gray-100 shadow-sm">
-                <div className="relative w-full md:w-96 group">
-                    <input className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-[#6c5ce7]/20 transition-all" placeholder="Filter by name, phone or number..." value={search} onChange={e => setSearch(e.target.value)} />
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg filter group-focus-within:drop-shadow-[0_0_5px_rgba(99,102,241,0.5)]">🔍</span>
-                </div>
-                <div className="flex gap-3 w-full md:w-auto">
-                    {STATUS_OPTIONS.map(s => (
-                        <button
-                            key={s}
-                            onClick={() => setFilterStatus(filterStatus === s ? '' : s)}
-                            className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all border ${filterStatus === s ? 'bg-[#6c5ce7] text-white border-[#6c5ce7] shadow-lg shadow-[#6c5ce7]/10 scale-105' : 'bg-white text-gray-400 border-gray-100 hover:border-[#f1f0ff]'}`}
-                        >
-                            {s.replace('_', ' ')}
-                        </button>
-                    ))}
-                </div>
-            </div>
+              {/* Mother Name */}
+              <div>
+                <label className={labelCls}>Mother Name</label>
+                <input
+                  className={inputCls}
+                  placeholder="Mother's full name"
+                  value={form.mother_name}
+                  onChange={(e) => setForm({ ...form, mother_name: e.target.value })}
+                />
+              </div>
 
-            {/* Data Feed */}
-            <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden min-h-[400px]">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="bg-gray-50/50">
-                            <tr>
-                                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Prospect</th>
-                                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Guardian Info</th>
-                                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Stage</th>
-                                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Registered</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {loading ? (
-                                Array(5).fill(0).map((_, i) => <tr key={i}><td colSpan={4} className="px-8 py-10 animate-pulse bg-gray-50/20" /></tr>)
-                            ) : enquiries.length === 0 ? (
-                                <tr><td colSpan={4} className="p-24 text-center text-gray-400 italic font-medium">No enquiry records match your current filter</td></tr>
-                            ) : enquiries.map(enq => (
-                                <tr key={enq.id} className="hover:bg-gray-50 transition-all group">
-                                    <td className="px-8 py-6">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-gray-50 to-[#f1f0ff] flex items-center justify-center font-bold text-[#a29bfe] text-[10px] border border-transparent group-hover:bg-white group-hover:border-[#f1f0ff] group-hover:shadow-sm transition-all">
-                                                {enq.enquiry_number?.slice(-3) || 'E'}
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-gray-900 text-sm group-hover:text-[#6c5ce7] transition-colors">{enq.student_name}</p>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-0.5">#{enq.enquiry_number || 'PENDING'}</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <p className="text-sm font-semibold text-gray-700">{enq.father_name}</p>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-[10px] text-gray-400 font-bold tracking-widest">{enq.contact_phone}</span>
-                                            <span className="w-1 h-1 rounded-full bg-gray-300" />
-                                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest capitalize">{enq.source?.replace('_', ' ')}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <select
-                                            value={enq.status}
-                                            onChange={e => updateStatus(enq.id, e.target.value)}
-                                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter border-2 cursor-pointer transition-all focus:ring-0 ${STATUS_COLORS[enq.status] || 'bg-gray-100'}`}
-                                        >
-                                            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-                                        </select>
-                                    </td>
-                                    <td className="px-8 py-6 text-right">
-                                        <p className="text-sm font-bold text-gray-700">{new Date(enq.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</p>
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-0.5">{new Date(enq.created_at).getFullYear()}</p>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+              {/* Contact Phone */}
+              <div>
+                <label className={labelCls}>Contact Phone *</label>
+                <input
+                  type="tel"
+                  className={inputCls}
+                  placeholder="Primary phone number"
+                  value={form.contact_phone}
+                  onChange={(e) => setForm({ ...form, contact_phone: e.target.value })}
+                  required
+                />
+              </div>
+
+              {/* Alternate Phone */}
+              <div>
+                <label className={labelCls}>Alternate Phone</label>
+                <input
+                  type="tel"
+                  className={inputCls}
+                  placeholder="Alternate phone number"
+                  value={form.alternate_phone}
+                  onChange={(e) => setForm({ ...form, alternate_phone: e.target.value })}
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className={labelCls}>Email</label>
+                <input
+                  type="email"
+                  className={inputCls}
+                  placeholder="Email address"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </div>
+
+              {/* Source */}
+              <div>
+                <label className={labelCls}>Source</label>
+                <select
+                  className={inputCls}
+                  value={form.source}
+                  onChange={(e) => setForm({ ...form, source: e.target.value })}
+                >
+                  {SOURCE_OPTIONS.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className={labelCls}>Notes</label>
+                <textarea
+                  className={inputCls}
+                  rows={2}
+                  placeholder="Any additional notes..."
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </div>
+
+              {/* Follow-up Date */}
+              <div>
+                <label className={labelCls}>Follow-up Date</label>
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={form.follow_up_date}
+                  onChange={(e) => setForm({ ...form, follow_up_date: e.target.value })}
+                />
+              </div>
+
+              {/* Assigned To (UI only) */}
+              <div>
+                <label className={labelCls}>Assigned To</label>
+                <input
+                  className={inputCls}
+                  placeholder="Staff member name"
+                  value={form.assigned_to}
+                  onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
+                />
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className={labelCls}>Status</label>
+                <select
+                  className={inputCls}
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                >
+                  <option value="new">New</option>
+                  <option value="contacted">Contacted</option>
+                  <option value="follow_up">Follow Up</option>
+                  <option value="interested">Interested</option>
+                  <option value="admitted">Admitted</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full py-2.5 bg-[#6c5ce7] hover:bg-[#5b4bd4] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {saving ? (
+                  <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                ) : (
+                  <Plus className="w-4 h-4" />
+                )}
+                {saving ? 'Adding...' : 'Add Enquiry'}
+              </button>
+            </form>
+          </div>
         </div>
-    );
+
+        {/* ── Right panel: List ─────────────────────────────────────────────── */}
+        <div className="lg:col-span-3 space-y-4">
+
+          {/* Status pill tabs */}
+          <div className="flex flex-wrap gap-2">
+            {ALL_STATUSES.map((s) => (
+              <button
+                key={s}
+                onClick={() => setActiveStatus(s)}
+                className={`px-3 py-1 rounded-full text-xs font-medium capitalize transition-colors border ${
+                  activeStatus === s
+                    ? 'bg-[#6c5ce7] text-white border-[#6c5ce7]'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-[#a29bfe]'
+                }`}
+              >
+                {s === 'follow_up' ? 'Follow Up' : s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Search + class filter */}
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                className="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#a29bfe] transition-colors w-full"
+                placeholder="Search by name or phone..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <select
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-[#a29bfe] transition-colors"
+              value={filterClass}
+              onChange={(e) => setFilterClass(e.target.value)}
+            >
+              <option value="">All Classes</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Table card */}
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+            {loading ? (
+              <div className="py-20 text-center text-slate-400 text-sm">Loading enquiries...</div>
+            ) : enquiries.length === 0 ? (
+              <div className="py-20 text-center space-y-3">
+                <Users className="w-10 h-10 text-slate-200 mx-auto" />
+                <p className="text-slate-400 text-sm">No enquiries found</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-xs text-slate-500">
+                      <th className="px-4 py-3 text-left font-medium">Enq #</th>
+                      <th className="px-4 py-3 text-left font-medium">Student</th>
+                      <th className="px-4 py-3 text-left font-medium">Class</th>
+                      <th className="px-4 py-3 text-left font-medium">Contact</th>
+                      <th className="px-4 py-3 text-left font-medium">Source</th>
+                      <th className="px-4 py-3 text-left font-medium">Status</th>
+                      <th className="px-4 py-3 text-left font-medium">Follow-up</th>
+                      <th className="px-4 py-3 text-left font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {enquiries.map((enq) => (
+                      <tr key={enq.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">
+                          {enq.enquiry_number ?? `#${enq.id}`}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-800 whitespace-nowrap">{enq.student_name}</div>
+                          <div className="text-xs text-slate-400">{enq.father_name}</div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                          {enq.class_applying_for || '—'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-1 text-slate-600 text-xs">
+                            <Phone className="w-3 h-3 flex-shrink-0" />
+                            {enq.contact_phone}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
+                          {sourceLabel(enq.source)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+                              STATUS_BADGE[enq.status] ?? 'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            {enq.status === 'follow_up' ? 'Follow Up' : enq.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {enq.follow_up_date ? (
+                            <div className="flex items-center gap-1 text-xs text-slate-500">
+                              <Calendar className="w-3 h-3 flex-shrink-0" />
+                              {formatDate(enq.follow_up_date)}
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div
+                            className="relative"
+                            ref={openMenuId === enq.id ? menuRef : undefined}
+                          >
+                            <button
+                              onClick={() =>
+                                setOpenMenuId(openMenuId === enq.id ? null : enq.id)
+                              }
+                              className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+
+                            {openMenuId === enq.id && (
+                              <div className="absolute right-0 top-8 z-20 w-52 bg-white border border-slate-100 rounded-xl shadow-lg py-1">
+                                <button
+                                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                  onClick={() => {
+                                    setSelectedEnquiry(enq);
+                                    setOpenMenuId(null);
+                                  }}
+                                >
+                                  <Users className="w-3.5 h-3.5 flex-shrink-0" />
+                                  View Details
+                                </button>
+                                <button
+                                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                  onClick={() => {
+                                    setChangeStatusId(enq.id);
+                                    setChangeStatusVal(enq.status);
+                                    setOpenMenuId(null);
+                                  }}
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                  Change Status
+                                </button>
+                                <button
+                                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                  onClick={() => {
+                                    setFollowUpId(enq.id);
+                                    setOpenMenuId(null);
+                                  }}
+                                >
+                                  <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                                  Add Follow-up Note
+                                </button>
+                                <hr className="my-1 border-slate-100" />
+                                <Link
+                                  href="/students/new"
+                                  className="w-full text-left px-4 py-2 text-sm text-[#6c5ce7] hover:bg-[#f1f0ff] flex items-center gap-2"
+                                  onClick={() => setOpenMenuId(null)}
+                                >
+                                  <ArrowRight className="w-3.5 h-3.5 flex-shrink-0" />
+                                  Convert to Admission
+                                </Link>
+                                <hr className="my-1 border-slate-100" />
+                                <button
+                                  className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2"
+                                  onClick={() => {
+                                    handleDelete(enq);
+                                    setOpenMenuId(null);
+                                  }}
+                                >
+                                  <X className="w-3.5 h-3.5 flex-shrink-0" />
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── View Detail Modal ──────────────────────────────────────────────────── */}
+      {selectedEnquiry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-800">Enquiry Details</h3>
+              <button
+                onClick={() => setSelectedEnquiry(null)}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6 flex-1 space-y-1">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-lg font-bold text-slate-800">{selectedEnquiry.student_name}</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+                    STATUS_BADGE[selectedEnquiry.status] ?? 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {selectedEnquiry.status === 'follow_up' ? 'Follow Up' : selectedEnquiry.status}
+                </span>
+              </div>
+              {(
+                [
+                  ['Enquiry #', selectedEnquiry.enquiry_number ?? `#${selectedEnquiry.id}`],
+                  ['Date of Birth', formatDate(selectedEnquiry.dob)],
+                  ['Gender', selectedEnquiry.gender || '—'],
+                  ['Class Applying For', selectedEnquiry.class_applying_for || '—'],
+                  ['Father Name', selectedEnquiry.father_name],
+                  ['Mother Name', selectedEnquiry.mother_name || '—'],
+                  ['Contact Phone', selectedEnquiry.contact_phone],
+                  ['Alternate Phone', selectedEnquiry.alternate_phone || '—'],
+                  ['Email', selectedEnquiry.email || '—'],
+                  ['Source', sourceLabel(selectedEnquiry.source)],
+                  ['Follow-up Date', formatDate(selectedEnquiry.follow_up_date)],
+                  ['Notes', selectedEnquiry.notes || '—'],
+                  ['Created', formatDate(selectedEnquiry.created_at)],
+                ] as [string, string][]
+              ).map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex justify-between py-2 border-b border-slate-50 text-sm last:border-0"
+                >
+                  <span className="text-slate-500 shrink-0 mr-4">{label}</span>
+                  <span className="text-slate-800 font-medium text-right break-words">{value}</span>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-4 border-t border-slate-100">
+              <button
+                onClick={() => setSelectedEnquiry(null)}
+                className="w-full py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm text-slate-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Change Status Modal ────────────────────────────────────────────────── */}
+      {changeStatusId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-800">Change Status</h3>
+              <button
+                onClick={() => { setChangeStatusId(null); setChangeStatusVal(''); }}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {changeStatusEnquiry && (
+                <p className="text-sm text-slate-500">
+                  Updating enquiry for{' '}
+                  <span className="font-medium text-slate-800">
+                    {changeStatusEnquiry.student_name}
+                  </span>
+                </p>
+              )}
+              <div>
+                <label className={labelCls}>New Status</label>
+                <select
+                  className={inputCls}
+                  value={changeStatusVal}
+                  onChange={(e) => setChangeStatusVal(e.target.value)}
+                >
+                  <option value="new">New</option>
+                  <option value="contacted">Contacted</option>
+                  <option value="follow_up">Follow Up</option>
+                  <option value="interested">Interested</option>
+                  <option value="admitted">Admitted</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => { setChangeStatusId(null); setChangeStatusVal(''); }}
+                  className="flex-1 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm text-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleChangeStatus}
+                  disabled={changeStatusSaving}
+                  className="flex-1 py-2 rounded-lg bg-[#6c5ce7] hover:bg-[#5b4bd4] text-white text-sm font-medium transition-colors disabled:opacity-60"
+                >
+                  {changeStatusSaving ? 'Saving...' : 'Save Status'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Follow-up Modal ────────────────────────────────────────────────────── */}
+      {followUpId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-800">Add Follow-up Note</h3>
+              <button
+                onClick={() => {
+                  setFollowUpId(null);
+                  setFollowUpNote('');
+                  setFollowUpStatus('');
+                  setFollowUpDate('');
+                }}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {followUpEnquiry && (
+                <div className="bg-slate-50 rounded-lg px-4 py-3 flex items-center justify-between">
+                  <span className="font-medium text-slate-800 text-sm">
+                    {followUpEnquiry.student_name}
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+                      STATUS_BADGE[followUpEnquiry.status] ?? 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {followUpEnquiry.status === 'follow_up' ? 'Follow Up' : followUpEnquiry.status}
+                  </span>
+                </div>
+              )}
+              <div>
+                <label className={labelCls}>Note *</label>
+                <textarea
+                  className={inputCls}
+                  rows={3}
+                  placeholder="Enter follow-up note..."
+                  value={followUpNote}
+                  onChange={(e) => setFollowUpNote(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Change Status (optional)</label>
+                <select
+                  className={inputCls}
+                  value={followUpStatus}
+                  onChange={(e) => setFollowUpStatus(e.target.value)}
+                >
+                  <option value="">No change</option>
+                  <option value="new">New</option>
+                  <option value="contacted">Contacted</option>
+                  <option value="follow_up">Follow Up</option>
+                  <option value="interested">Interested</option>
+                  <option value="admitted">Admitted</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Next Follow-up Date</label>
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={followUpDate}
+                  onChange={(e) => setFollowUpDate(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => {
+                    setFollowUpId(null);
+                    setFollowUpNote('');
+                    setFollowUpStatus('');
+                    setFollowUpDate('');
+                  }}
+                  className="flex-1 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm text-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleFollowUpSave}
+                  disabled={followUpSaving}
+                  className="flex-1 py-2 rounded-lg bg-[#6c5ce7] hover:bg-[#5b4bd4] text-white text-sm font-medium transition-colors disabled:opacity-60"
+                >
+                  {followUpSaving ? 'Saving...' : 'Save Note'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

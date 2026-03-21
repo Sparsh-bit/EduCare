@@ -45,10 +45,15 @@ app.use('*', async (c, next) => {
     return cors({ origin: '*', allowMethods: ['POST', 'OPTIONS'], allowHeaders: ['Content-Type', 'x-api-key'] })(c, next)
   }
 
-  // For all other routes, allow only whitelisted origins + non-browser requests
-  if (!origin || allowedOrigins.includes(origin)) {
+  // For all other routes, allow only whitelisted origins.
+  // Non-browser requests (no Origin header) are passed through without CORS headers — they don't need them.
+  if (!origin) {
+    // No Origin header — direct server-to-server or same-origin request; skip CORS middleware.
+    return next()
+  }
+  if (allowedOrigins.includes(origin)) {
     return cors({
-      origin: origin || '*',
+      origin,
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization'],
       credentials: true,

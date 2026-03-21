@@ -121,7 +121,7 @@ export default function TeamPage() {
     const roleBadge = (role: string) => {
         switch (role) {
             case 'owner': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 uppercase tracking-wider">Admin</span>;
-            case 'co-owner': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 uppercase tracking-wider">Co-Admin</span>;
+            case 'co-owner': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#f1f0ff] text-[#5b4bd5] uppercase tracking-wider">Co-Admin</span>;
             case 'teacher': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 uppercase tracking-wider">Teacher</span>;
             case 'accountant': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 uppercase tracking-wider">Accountant</span>;
             case 'front_desk': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-100 text-cyan-700 uppercase tracking-wider">Front Desk</span>;
@@ -216,7 +216,7 @@ export default function TeamPage() {
                 </div>
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
                     <p className="text-xs text-gray-500">Co-Admins</p>
-                    <p className="text-2xl font-bold text-purple-600 mt-1">{activeUsers.filter(u => u.role === 'co-owner').length}</p>
+                    <p className="text-2xl font-bold text-[#6c5ce7] mt-1">{activeUsers.filter(u => u.role === 'co-owner').length}</p>
                 </div>
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
                     <p className="text-xs text-gray-500">Teachers</p>
@@ -267,7 +267,7 @@ export default function TeamPage() {
                                 <tr key={u.id} className={!u.is_active ? 'opacity-50 bg-gray-50/50' : 'hover:bg-gray-50/50'}>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
-                                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold ${u.role === 'co-owner' ? 'bg-purple-500' : 'bg-blue-500'}`}>
+                                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold ${u.role === 'co-owner' ? 'bg-[#6c5ce7]' : 'bg-blue-500'}`}>
                                                 {u.name.charAt(0)}
                                             </div>
                                             <div>
@@ -290,7 +290,7 @@ export default function TeamPage() {
                                             {/* Promote / Demote */}
                                             {u.role === 'teacher' ? (
                                                 <button onClick={() => handleRoleChange(u.id, 'co-owner')}
-                                                    className="px-2 py-1 text-[10px] font-medium bg-purple-50 text-purple-700 rounded-md hover:bg-purple-100 transition-colors"
+                                                    className="px-2 py-1 text-[10px] font-medium bg-[#f1f0ff] text-[#5b4bd5] rounded-md hover:bg-[#f1f0ff] transition-colors"
                                                     title="Promote to Co-Admin">
                                                     ↑ Promote
                                                 </button>

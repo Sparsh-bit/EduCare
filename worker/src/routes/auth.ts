@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { Env, Variables } from '../types'
 import { authenticate, authorize, ownerOnly, signToken } from '../middleware/auth'
-import { sensitiveAuthLimiter } from '../middleware/rateLimit'
+import { sensitiveAuthLimiter, authLimiter } from '../middleware/rateLimit'
 import { getSupabase } from '../utils/supabase'
 import { createAuditLog, getClientIp } from '../utils/auditLog'
 import { sha256 } from '../utils/helpers'
@@ -147,7 +147,7 @@ router.post('/register-school', sensitiveAuthLimiter, async (c) => {
 })
 
 // ─── LOGIN ───
-router.post('/login', async (c) => {
+router.post('/login', authLimiter, async (c) => {
   try {
     const body = await c.req.json()
     const { schoolCode, username, password } = body
@@ -177,10 +177,10 @@ router.post('/login', async (c) => {
       return c.json({ error: 'Invalid school code, username, or password' }, 401)
     }
 
-    // Look up user in our users table
+    // Look up user in our users table (exclude sensitive fields)
     const { data: user } = await supabase
       .from('users')
-      .select('*')
+      .select('id, email, username, name, role, school_id, phone, preferred_language, supabase_auth_id')
       .eq('school_id', school.id)
       .eq('is_active', true)
       .or(`username.eq.${normalizedUsername},email.eq.${normalizedUsername}`)
@@ -248,7 +248,7 @@ router.post('/refresh', async (c) => {
 
     const supabase = getSupabase(c.env)
     const { data: user } = await supabase.from('users')
-      .select('*').eq('id', payload.id as number).eq('is_active', true).single()
+      .select('id, email, name, role, school_id, refresh_token_hash').eq('id', payload.id as number).eq('is_active', true).single()
     if (!user) return c.json({ error: 'Invalid refresh token' }, 401)
 
     const rtHash = await sha256(refreshToken)
@@ -446,10 +446,11 @@ router.put('/users/:userId/role', authenticate, ownerOnly(), async (c) => {
 
     const user = c.get('user')
     const supabase = getSupabase(c.env)
-    const userId = parseInt(c.req.param('userId'))
+    const userId = parseInt(c.req.param('userId'), 10)
+    if (!Number.isInteger(userId) || userId < 1) return c.json({ error: 'Invalid user ID' }, 400)
 
     const { data: targetUser } = await supabase.from('users')
-      .select('*').eq('id', userId).eq('school_id', user.school_id).single()
+      .select('id, name, role').eq('id', userId).eq('school_id', user.school_id).single()
     if (!targetUser) return c.json({ error: 'User not found' }, 404)
     if (targetUser.role === 'owner') return c.json({ error: 'Cannot change admin role' }, 403)
 
@@ -475,10 +476,11 @@ router.put('/users/:userId/deactivate', authenticate, ownerOnly(), async (c) => 
   try {
     const user = c.get('user')
     const supabase = getSupabase(c.env)
-    const userId = parseInt(c.req.param('userId'))
+    const userId = parseInt(c.req.param('userId'), 10)
+    if (!Number.isInteger(userId) || userId < 1) return c.json({ error: 'Invalid user ID' }, 400)
 
     const { data: targetUser } = await supabase.from('users')
-      .select('*').eq('id', userId).eq('school_id', user.school_id).single()
+      .select('id, name, role').eq('id', userId).eq('school_id', user.school_id).single()
     if (!targetUser) return c.json({ error: 'User not found' }, 404)
     if (targetUser.role === 'owner') return c.json({ error: 'Cannot deactivate admin' }, 403)
 
@@ -494,7 +496,8 @@ router.put('/users/:userId/reactivate', authenticate, ownerOnly(), async (c) => 
   try {
     const user = c.get('user')
     const supabase = getSupabase(c.env)
-    const userId = parseInt(c.req.param('userId'))
+    const userId = parseInt(c.req.param('userId'), 10)
+    if (!Number.isInteger(userId) || userId < 1) return c.json({ error: 'Invalid user ID' }, 400)
 
     const { data: targetUser } = await supabase.from('users')
       .select('*').eq('id', userId).eq('school_id', user.school_id).single()
@@ -516,7 +519,8 @@ router.put('/users/:userId/reset-password', authenticate, ownerOnly(), async (c)
 
     const user = c.get('user')
     const supabase = getSupabase(c.env)
-    const userId = parseInt(c.req.param('userId'))
+    const userId = parseInt(c.req.param('userId'), 10)
+    if (!Number.isInteger(userId) || userId < 1) return c.json({ error: 'Invalid user ID' }, 400)
 
     const { data: targetUser } = await supabase.from('users')
       .select('*').eq('id', userId).eq('school_id', user.school_id).single()
@@ -544,7 +548,7 @@ router.put('/users/:userId/reset-password', authenticate, ownerOnly(), async (c)
 })
 
 // ─── FORGOT PASSWORD ───
-router.post('/forgot-password', async (c) => {
+router.post('/forgot-password', authLimiter, async (c) => {
   const ok = () => c.json({ message: 'If that email is registered, a reset link has been sent.' })
   try {
     const body = await c.req.json()
@@ -553,7 +557,7 @@ router.post('/forgot-password', async (c) => {
 
     const supabase = getSupabase(c.env)
     const { data: user } = await supabase.from('users')
-      .select('*').eq('username', username.trim()).eq('is_active', true).single()
+      .select('id, email, name, school_id').eq('username', username.trim()).eq('is_active', true).single()
     if (!user) return ok()
 
     const { data: school } = await supabase.from('schools').select('name').eq('id', user.school_id).single()
@@ -634,7 +638,7 @@ router.post('/send-verification-otp', authenticate, async (c) => {
     const user = c.get('user')
     const supabase = getSupabase(c.env)
 
-    const { data: userRecord } = await supabase.from('users').select('*').eq('id', user.id).single()
+    const { data: userRecord } = await supabase.from('users').select('id, email, name, school_id, email_verified').eq('id', user.id).single()
     if (!userRecord) return c.json({ error: 'User not found' }, 404)
     if (userRecord.email_verified) return c.json({ error: 'Email is already verified' }, 400)
 
@@ -670,7 +674,7 @@ router.post('/verify-email', authenticate, async (c) => {
     const user = c.get('user')
     const supabase = getSupabase(c.env)
 
-    const { data: userRecord } = await supabase.from('users').select('*').eq('id', user.id).single()
+    const { data: userRecord } = await supabase.from('users').select('id, email_verified').eq('id', user.id).single()
     if (!userRecord) return c.json({ error: 'User not found' }, 404)
     if (userRecord.email_verified) return c.json({ error: 'Email is already verified' }, 400)
 

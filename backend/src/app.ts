@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
+import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { config } from './config';
@@ -38,10 +40,70 @@ const app = express();
 // Honor reverse-proxy IP forwarding so rate limiting does not collapse all users into one IP bucket.
 app.set('trust proxy', config.trustProxy);
 
+// ─── Request ID ─── (attach before anything else so logs/errors carry the same trace ID)
+app.use((req, res, next) => {
+    const id = (req.headers['x-request-id'] as string) || crypto.randomUUID();
+    req.headers['x-request-id'] = id;
+    res.setHeader('X-Request-ID', id);
+    next();
+});
+
+// ─── Request Timeout (30 s) ───
+// Sends 503 and destroys the socket if the handler hasn't finished in 30 seconds.
+const REQUEST_TIMEOUT_MS = 30_000;
+app.use((req, res, next) => {
+    // Health checks get a shorter timeout; they should respond in < 2 s.
+    const timeout = req.path.startsWith('/api/health') ? 5_000 : REQUEST_TIMEOUT_MS;
+    const timer = setTimeout(() => {
+        if (!res.headersSent) {
+            logger.warn(`Request timeout: ${req.method} ${req.path}`, {
+                requestId: req.headers['x-request-id'],
+                ip: req.ip,
+            });
+            res.status(503).json({ error: 'Request timed out. Please try again.' });
+        }
+        req.socket.destroy();
+    }, timeout);
+    // Clear on finish so the timer doesn't hold the event loop open
+    res.on('finish', () => clearTimeout(timer));
+    res.on('close', () => clearTimeout(timer));
+    next();
+});
+
 // ─── Security ───
 app.use(helmet({
     crossOriginResourcePolicy: { policy: 'same-site' },
+    hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true,
+    },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+    noSniff: true,
+    // xssFilter deliberately omitted — X-XSS-Protection is deprecated in modern browsers;
+    // CSP below is the correct defence against XSS.
+    xssFilter: false,
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc:     ["'self'"],
+            scriptSrc:      ["'self'"],
+            styleSrc:       ["'self'", "'unsafe-inline'"],   // inline styles only for email templates
+            imgSrc:         ["'self'", 'data:', 'blob:'],
+            connectSrc:     ["'self'"],
+            fontSrc:        ["'self'"],
+            objectSrc:      ["'none'"],
+            frameAncestors: ["'none'"],
+            baseUri:        ["'self'"],
+            formAction:     ["'self'"],
+            upgradeInsecureRequests: [],
+        },
+    },
 }));
+
+// ─── Gzip Compression ───
+// Compress all JSON/text responses > 1 KB. Reduces bandwidth ~70% for large list payloads.
+app.use(compression({ threshold: 1024 }));
 
 // CORS — supports a comma-separated list of allowed origins so both the
 // production domain and Cloudflare Pages preview URLs can be whitelisted.
@@ -61,7 +123,7 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
 }));
 app.use(cookieParser());
 
@@ -97,6 +159,9 @@ const sensitiveAuthLimiter = rateLimit({
 });
 app.use('/api/auth/users', sensitiveAuthLimiter);
 app.use('/api/auth/register-school', sensitiveAuthLimiter);
+app.use('/api/auth/forgot-password', sensitiveAuthLimiter);
+app.use('/api/auth/reset-password', sensitiveAuthLimiter);
+app.use('/api/auth/send-verification-otp', sensitiveAuthLimiter);
 
 const highValueLimiter = rateLimit({
     windowMs: config.rateLimit.windowMs,
@@ -149,37 +214,55 @@ app.use(express.json({ limit: '256kb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ─── Protected files (uploads) ───
-app.get('/uploads/:fileName', authenticate, async (req: AuthRequest, res) => {
+// Supports both the legacy flat path  /uploads/:fileName
+// and the new school-namespaced path  /uploads/:schoolId/:fileName
+app.get('/uploads/:schoolIdOrFile/:fileName?', authenticate, async (req: AuthRequest, res) => {
     try {
-        const schoolId = req.user?.school_id;
-        if (!schoolId) return res.status(403).json({ error: 'User is not mapped to a school' });
+        const userSchoolId = req.user?.school_id;
+        if (!userSchoolId) return res.status(403).json({ error: 'User is not mapped to a school' });
 
-        const fileName = path.basename(req.params['fileName'] as string);
-        if (!fileName || fileName !== req.params.fileName) {
+        // Determine whether the request uses the namespaced or legacy format
+        let relPath: string;
+        if (req.params.fileName) {
+            // New format: /uploads/{schoolId}/{filename}
+            const reqSchoolId = parseInt(req.params.schoolIdOrFile as string, 10);
+            if (isNaN(reqSchoolId) || reqSchoolId !== userSchoolId) {
+                return res.status(403).json({ error: 'Access denied' });
+            }
+            relPath = path.join(String(reqSchoolId), path.basename(req.params.fileName as string));
+        } else {
+            // Legacy flat format: /uploads/{filename}
+            relPath = path.basename(req.params.schoolIdOrFile as string);
+        }
+
+        // Path traversal guard — resolved path must stay inside uploadDir
+        const filePath = path.resolve(config.uploadDir, relPath);
+        if (!filePath.startsWith(path.resolve(config.uploadDir) + path.sep)) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
+        // Verify ownership — the document must belong to this school
         const doc = await db('student_documents as sd')
             .join('students as s', 'sd.student_id', 's.id')
-            .where('s.school_id', schoolId)
+            .where('s.school_id', userSchoolId)
+            .where('sd.school_id', userSchoolId)
             .where(function () {
-                this.where('sd.file_url', `/uploads/${fileName}`).orWhere('sd.file_name', fileName);
+                this.where('sd.file_url', `/uploads/${relPath}`)
+                    .orWhere('sd.file_url', `/uploads/${path.basename(relPath)}`);
             })
-            .select('sd.file_url', 'sd.mime_type', 'sd.file_name')
+            .select('sd.mime_type', 'sd.file_name')
             .first();
 
         if (!doc) return res.status(404).json({ error: 'File not found' });
 
-        const filePath = path.resolve(config.uploadDir, fileName);
-        if (!filePath.startsWith(path.resolve(config.uploadDir))) {
-            return res.status(400).json({ error: 'Invalid file path' });
-        }
         if (!fs.existsSync(filePath)) {
             return res.status(404).json({ error: 'File not found on disk' });
         }
 
         res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('Content-Disposition', `inline; filename="${doc.file_name || fileName}"`);
+        // Force download — prevents browsers from executing any uploaded content
+        const safeFileName = (doc.file_name || path.basename(relPath)).replace(/["\\;\r\n]/g, '_');
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
         if (doc.mime_type) res.type(doc.mime_type);
         res.sendFile(filePath);
     } catch (error) {
@@ -188,11 +271,20 @@ app.get('/uploads/:fileName', authenticate, async (req: AuthRequest, res) => {
     }
 });
 
-// ─── Request logging ───
-app.use((req, _res, next) => {
-    logger.info(`${req.method} ${req.path}`, {
-        ip: req.ip,
-        userAgent: req.headers['user-agent']?.substring(0, 100),
+// ─── Request logging ─── (method, path, status, duration, request ID)
+app.use((req, res, next) => {
+    const start = Date.now();
+    const requestId = req.headers['x-request-id'] as string;
+
+    res.on('finish', () => {
+        const ms = Date.now() - start;
+        const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
+        logger[level](`${req.method} ${req.path} ${res.statusCode} ${ms}ms`, {
+            requestId,
+            ip: req.ip,
+            userAgent: req.headers['user-agent']?.substring(0, 120),
+            ...(ms > 5_000 ? { slowRequest: true } : {}),
+        });
     });
     next();
 });

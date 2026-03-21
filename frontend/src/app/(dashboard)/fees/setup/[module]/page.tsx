@@ -66,19 +66,19 @@ export default function GenericFeesSettingPage() {
 
     return (
         <div className="p-6 bg-[#f8f9fb] min-h-screen">
-            <div className="mb-6 flex items-center text-sm text-gray-500 gap-2">
+            <div className="mb-6 flex items-center text-sm text-slate-500 gap-2">
                 <button onClick={() => router.push('/dashboard')} className="hover:text-teal-600 transition-colors">
                     <span className="text-teal-600">🏠</span>
                 </button>
                 <span>/</span>
                 <span onClick={() => router.push('/fees/setup')} className="text-teal-600 cursor-pointer hover:underline">Fees Setting</span>
                 <span>/</span>
-                <span className="text-gray-900 font-medium">{info.title}</span>
+                <span className="text-slate-900 font-medium">{info.title}</span>
             </div>
 
             <div className="flex flex-col lg:flex-row gap-6">
-                <div className="w-full lg:w-1/3 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-fit">
-                    <div className="p-4 border-b border-gray-100 font-bold text-gray-800 tracking-wide text-sm bg-gray-50/50">
+                <div className="w-full lg:w-1/3 bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden h-fit">
+                    <div className="p-4 border-b border-slate-100 font-bold text-slate-800 tracking-wide text-sm bg-slate-50/50">
                         Add {info.title}
                     </div>
                     <form onSubmit={handleSave} className="p-5 space-y-4">
@@ -90,7 +90,7 @@ export default function GenericFeesSettingPage() {
                                 onChange={e => setName(e.target.value)}
                                 type="text"
                                 placeholder={info.help}
-                                className="w-full px-3 py-2 border border-gray-200 rounded text-sm text-gray-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                className="w-full px-3 py-2 border border-slate-200 rounded text-sm text-slate-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                             />
                         </div>
                         <div className="pt-2">
@@ -101,28 +101,28 @@ export default function GenericFeesSettingPage() {
                     </form>
                 </div>
 
-                <div className="w-full lg:w-2/3 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="p-4 border-b border-gray-100 font-bold text-gray-800 tracking-wide text-sm bg-gray-50/50">
+                <div className="w-full lg:w-2/3 bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 font-bold text-slate-800 tracking-wide text-sm bg-slate-50/50">
                         {info.title} List
                     </div>
                     <div className="p-5">
-                        <div className="overflow-x-auto border border-gray-100 rounded">
+                        <div className="overflow-x-auto border border-slate-100 rounded">
                             <table className="w-full text-sm text-left">
-                                <thead className="bg-gray-100 font-bold text-gray-800">
+                                <thead className="bg-slate-100 font-bold text-slate-800">
                                     <tr>
-                                        <th className="px-4 py-3 border-b border-gray-200">Name</th>
-                                        <th className="px-4 py-3 border-b border-gray-200 text-right w-24">Action</th>
+                                        <th className="px-4 py-3 border-b border-slate-200">Name</th>
+                                        <th className="px-4 py-3 border-b border-slate-200 text-right w-24">Action</th>
                                     </tr>
                                 </thead>
-                                <tbody className="text-gray-700">
+                                <tbody className="text-slate-700">
                                     {loading ? (
-                                        <tr><td colSpan={2} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+                                        <tr><td colSpan={2} className="px-4 py-8 text-center text-slate-400">Loading...</td></tr>
                                     ) : items.length === 0 ? (
-                                        <tr><td colSpan={2} className="px-4 py-8 text-center text-gray-400">No {info.title.toLowerCase()} found</td></tr>
+                                        <tr><td colSpan={2} className="px-4 py-8 text-center text-slate-400">No {info.title.toLowerCase()} found</td></tr>
                                     ) : (
                                         items.map(item => (
-                                            <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50/50">
-                                                <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
+                                            <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                                                <td className="px-4 py-3 font-medium text-slate-800">{item.name}</td>
                                                 <td className="px-4 py-3 text-right">
                                                     <button type="button" onClick={() => handleDelete(item.id)} className="bg-red-50 hover:bg-red-100 text-red-600 rounded px-2 py-1 text-xs transition-colors">
                                                         Delete

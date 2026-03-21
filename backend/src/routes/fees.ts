@@ -54,6 +54,7 @@ router.post(
                 const [createdStructure] = await trx('fee_structures').insert({
                     class_id,
                     academic_year_id: academicYear.id,
+                    school_id: schoolId,
                     total_amount,
                     installments_count,
                     description,
@@ -62,6 +63,7 @@ router.post(
                 const installmentAmount = Math.round((total_amount / installments_count) * 100) / 100;
                 const createdInstallments = installment_dates.map((date: string, i: number) => ({
                     fee_structure_id: createdStructure.id,
+                    school_id: schoolId,
                     installment_no: i + 1,
                     amount: i === installments_count - 1
                         ? total_amount - (installmentAmount * (installments_count - 1))
@@ -128,13 +130,14 @@ router.post(
         body('student_id').isInt(),
         body('installment_id').isInt(),
         body('amount_paid').isFloat({ min: 0 }),
+        body('payment_mode').optional().isIn(['cash', 'cheque', 'bank', 'dd']),
     ]),
     async (req: AuthRequest, res: Response) => {
         try {
             const schoolId = req.user?.school_id;
             if (!schoolId) return res.status(403).json({ error: 'User is not mapped to a school' });
 
-            const { student_id, installment_id, amount_paid, notes } = req.body;
+            const { student_id, installment_id, amount_paid, notes, payment_mode } = req.body;
 
             const student = await db('students').where({ id: student_id, school_id: schoolId }).whereNull('deleted_at').first();
             if (!student) return res.status(404).json({ error: 'Student not found' });
@@ -173,10 +176,11 @@ router.post(
                     student_id,
                     installment_id,
                     academic_year_id: academicYear.id,
+                    school_id: schoolId,
                     amount_paid,
                     late_fee: lateFee,
                     payment_date: new Date().toISOString().split('T')[0],
-                    payment_mode: 'cash',
+                    payment_mode: payment_mode || 'cash',
                     receipt_no: receiptNo,
                     notes,
                 }).returning('*');
@@ -341,6 +345,7 @@ router.post(
                     student_id,
                     installment_id,
                     academic_year_id: academicYear.id,
+                    school_id: schoolId,
                     amount_paid: parseFloat(installment.amount) + lateFee,
                     late_fee: lateFee,
                     payment_date: new Date().toISOString().split('T')[0],

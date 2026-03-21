@@ -12,11 +12,13 @@ export interface User {
     id: number;
     name: string;
     username: string;
+    email?: string;
     role: string;
     phone?: string;
     designation?: string;
     department?: string;
     school_id: number;
+    school_name?: string;
     is_active: boolean;
     created_at: string;
 }
@@ -64,6 +66,7 @@ export interface Student {
     status: string;
     school_id: number;
     created_at: string;
+    updated_at?: string;
 }
 
 export interface StudentListResponse {
@@ -278,13 +281,17 @@ export interface Leave {
     id: number;
     staff_id: number;
     staff_name?: string;
+    designation?: string;
     leave_type: string;
     from_date: string;
     to_date: string;
     reason?: string;
     status: 'pending' | 'approved' | 'rejected';
+    rejection_reason?: string;
+    approved_by?: number;
     school_id: number;
     created_at: string;
+    updated_at?: string;
 }
 
 export interface SalaryRecord {

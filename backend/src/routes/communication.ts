@@ -167,6 +167,19 @@ router.get('/recipients', authenticate, authorize('tenant_admin', 'owner', 'co-o
             return res.status(400).json({ error: 'section_id must be a positive integer' });
         }
 
+        // Validate class/section belong to this school
+        if (classIdInt) {
+            const cls = await db('classes').where({ id: classIdInt, school_id: schoolId }).first();
+            if (!cls) return res.status(403).json({ error: 'Class not found in your school' });
+        }
+        if (sectionIdInt) {
+            const sec = await db('sections')
+                .join('classes', 'sections.class_id', 'classes.id')
+                .where({ 'sections.id': sectionIdInt, 'classes.school_id': schoolId })
+                .first();
+            if (!sec) return res.status(403).json({ error: 'Section not found in your school' });
+        }
+
         let recipients: any[] = [];
 
         if (group === 'all_parents' || group === 'parents') {

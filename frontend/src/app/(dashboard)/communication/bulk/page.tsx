@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import type { SmsTemplate, Recipient } from '@/lib/types';
+import toast from 'react-hot-toast';
+import { Send, MessageSquare, Users } from 'lucide-react';
 
 export default function BulkMessagesPage() {
     const [templates, setTemplates] = useState<SmsTemplate[]>([]);
@@ -11,8 +13,6 @@ export default function BulkMessagesPage() {
     const [templateId, setTemplateId] = useState('');
     const [content, setContent] = useState('');
     const [sending, setSending] = useState(false);
-    const [result, setResult] = useState<{ total?: number; queued?: number } | null>(null);
-    const [error, setError] = useState('');
 
     const loadTemplates = useCallback(async () => {
         try { const data = await api.getSmsTemplates(); setTemplates(data); } catch { setTemplates([]); }
@@ -22,18 +22,21 @@ export default function BulkMessagesPage() {
         try { const data = await api.getRecipients(recipientGroup); setRecipients(data); } catch { setRecipients([]); }
     }, [recipientGroup]);
 
-    useEffect(() => { (async () => { await loadTemplates(); })(); }, [loadTemplates]);
-    useEffect(() => { (async () => { await loadRecipients(); })(); }, [loadRecipients]);
+    useEffect(() => { loadTemplates(); }, [loadTemplates]);
+    useEffect(() => { loadRecipients(); }, [loadRecipients]);
 
     const handleSend = async () => {
-        if (!content || recipients.length === 0) return;
+        if (!content) { toast.error('Please enter a message'); return; }
+        if (recipients.length === 0) { toast.error('No recipients found for this group'); return; }
         setSending(true);
-        setError('');
         try {
             const data = await api.sendBulkMessage({ channel, recipients, content, template_id: templateId || undefined });
-            setResult(data);
-            setTimeout(() => setResult(null), 5000);
-        } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed to send'); }
+            toast.success(`Message sent to ${data.total ?? data.queued ?? recipients.length} recipients`);
+            setContent('');
+            setTemplateId('');
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Failed to send message');
+        }
         setSending(false);
     };
 
@@ -44,145 +47,141 @@ export default function BulkMessagesPage() {
     };
 
     return (
-        <div className="space-y-8 animate-fade-in p-2">
+        <div className="space-y-6">
+            {/* Header */}
             <div>
-                <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Broadcast Center</h1>
-                <p className="text-gray-500 text-sm mt-1.5 font-medium">Reach out to parents, staff, or custom groups instantly</p>
+                <h1 className="text-2xl font-bold text-slate-900">Send Bulk Message</h1>
+                <p className="text-sm text-slate-500 mt-0.5">Send SMS, WhatsApp, or email to parents and staff</p>
             </div>
 
-            {error && <div className="bg-rose-50 border border-rose-100 text-rose-600 px-5 py-3 rounded-2xl text-sm font-semibold flex items-center gap-3">
-                <span className="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center text-xs">✕</span>
-                {error}
-            </div>}
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Composer */}
-                <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Message Composer */}
+                <div className="lg:col-span-2 space-y-5">
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6 space-y-5">
+                        {/* Channel */}
                         <div>
-                            <label className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400 mb-4 block">Communication Channel</label>
-                            <div className="flex flex-wrap gap-3">
+                            <label className="block text-sm font-medium text-slate-600 mb-2">Send via</label>
+                            <div className="flex flex-wrap gap-2">
                                 {[
-                                    { id: 'sms', label: 'SMS Gateway', icon: '💬', color: 'bg-[#6c5ce7]' },
-                                    { id: 'whatsapp', label: 'WhatsApp', icon: '📱', color: 'bg-emerald-600' },
-                                    { id: 'email', label: 'Email Service', icon: '📧', color: 'bg-amber-600' }
+                                    { id: 'sms', label: 'SMS' },
+                                    { id: 'whatsapp', label: 'WhatsApp' },
+                                    { id: 'email', label: 'Email' },
                                 ].map(c => (
                                     <button
                                         key={c.id}
                                         onClick={() => setChannel(c.id)}
-                                        className={`flex items-center gap-3 px-5 py-3 rounded-2xl text-sm font-bold transition-all border ${channel === c.id
-                                                ? `border-transparent ${c.color} text-white shadow-lg shadow-gray-200`
-                                                : 'border-gray-100 bg-gray-50 text-gray-500 hover:bg-gray-100'
-                                            }`}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                            channel === c.id
+                                                ? 'bg-[#6c5ce7] text-white'
+                                                : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                        }`}
                                     >
-                                        <span className="text-lg">{c.icon}</span>
                                         {c.label}
                                     </button>
                                 ))}
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Recipients + Template */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400 ml-1">Recipient Group</label>
+                                <label className="block text-sm font-medium text-slate-600">Send to</label>
                                 <select
-                                    className="w-full bg-gray-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3 px-4"
                                     value={recipientGroup}
                                     onChange={e => setRecipientGroup(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-[#a29bfe] outline-none rounded-lg text-sm transition-colors"
                                 >
-                                    <option value="all_parents">All Active Parents</option>
-                                    <option value="all_staff">All Faculty & Staff</option>
-                                    <option value="fee_defaulters">Fee Overdue Defaulters</option>
+                                    <option value="all_parents">All Parents</option>
+                                    <option value="all_staff">All Staff</option>
+                                    <option value="fee_defaulters">Students with Pending Fees</option>
                                 </select>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400 ml-1">Select Template</label>
+                                <label className="block text-sm font-medium text-slate-600">Use template</label>
                                 <select
-                                    className="w-full bg-gray-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#6c5ce7]/20 py-3 px-4"
                                     value={templateId}
                                     onChange={e => selectTemplate(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-[#a29bfe] outline-none rounded-lg text-sm transition-colors"
                                 >
-                                    <option value="">-- Custom Compose --</option>
+                                    <option value="">Write custom message</option>
                                     {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                 </select>
                             </div>
                         </div>
 
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between ml-1">
-                                <label className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400">Message Content</label>
-                                <span className="text-[10px] font-bold text-[#6c5ce7] bg-[#f1f0ff] px-2 py-0.5 rounded cursor-help">Available Tags: {'{student_name}'}, {'{school_name}'}</span>
+                        {/* Message */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <label className="block text-sm font-medium text-slate-600">Message</label>
+                                <span className="text-xs text-slate-400">
+                                    {content.length} chars &bull; ~{Math.ceil(content.length / 160)} SMS
+                                </span>
                             </div>
                             <textarea
-                                className="w-full bg-gray-50 border-none rounded-2xl text-sm font-medium focus:ring-2 focus:ring-[#6c5ce7]/20 py-4 px-5 min-h-[160px] resize-none"
-                                placeholder="Start typing your broadcast message here..."
                                 value={content}
-                                onChange={(e) => setContent(e.target.value)}
+                                onChange={e => setContent(e.target.value)}
+                                placeholder="Type your message here... Use {student_name} or {school_name} as placeholders."
+                                rows={5}
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-[#a29bfe] outline-none rounded-lg text-sm transition-colors resize-none"
                             />
-                            <div className="flex items-center justify-between text-[10px] font-bold text-gray-400 px-2">
-                                <span>{content.length} characters</span>
-                                <span>Est. {Math.ceil(content.length / 160)} SMS units per recipient</span>
-                            </div>
                         </div>
 
-                        <div className="pt-2 flex items-center justify-between bg-[#f1f0ff]/30 p-4 rounded-2xl border border-[#f1f0ff]">
-                            <div className="flex flex-col">
-                                <span className="text-[10px] font-extrabold text-[#a29bfe] uppercase tracking-tighter">Ready to dispatch</span>
-                                <span className="text-sm font-bold text-[#3d2e9e]">{recipients.length} validated recipients</span>
+                        {/* Send */}
+                        <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                            <div className="flex items-center gap-2 text-sm text-slate-600">
+                                <Users size={14} className="text-slate-400" />
+                                <span>{recipients.length} recipients selected</span>
                             </div>
                             <button
                                 onClick={handleSend}
-                                disabled={sending || !content || recipients.length === 0}
-                                className="px-8 py-3 bg-[#6c5ce7] text-white rounded-xl text-sm font-bold hover:bg-[#5b4bd5] disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-[#6c5ce7]/20 transition-all flex items-center gap-2"
+                                disabled={sending || !content}
+                                className="flex items-center gap-2 bg-[#6c5ce7] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#5b4bd5] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                                 {sending ? (
                                     <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        Processing...
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Sending...
                                     </>
                                 ) : (
-                                    <>Dispatch Broadcast 🚀</>
+                                    <>
+                                        <Send size={14} />
+                                        Send Message
+                                    </>
                                 )}
                             </button>
                         </div>
-                        {result && (
-                            <div className="bg-emerald-50 border border-emerald-100 text-emerald-600 p-4 rounded-2xl text-xs font-bold animate-fade-in flex items-center gap-3">
-                                <span className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center text-xs">✓</span>
-                                Broadcast successfully queued! {result.total || result.queued} messages are being dispatched via {channel.toUpperCase()}.
-                            </div>
-                        )}
                     </div>
                 </div>
 
-                {/* Directory Preview */}
-                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col max-h-[750px]">
-                    <div className="p-6 border-b border-gray-50 bg-gray-50/30">
-                        <h3 className="font-bold text-gray-900">Directory Preview</h3>
-                        <p className="text-[11px] text-gray-500 font-semibold mt-0.5">Random sample of selected recipients</p>
+                {/* Recipients Preview */}
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex flex-col max-h-[500px]">
+                    <div className="px-5 py-4 border-b border-slate-100">
+                        <h3 className="font-semibold text-slate-900 text-sm">Recipients</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Preview of selected group</p>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2">
+                    <div className="flex-1 overflow-y-auto p-3">
                         {recipients.length === 0 ? (
-                            <div className="p-10 text-center flex flex-col items-center opacity-40">
-                                <div className="text-4xl mb-2">👥</div>
-                                <p className="text-xs font-bold uppercase tracking-tight">No Recipients Found</p>
+                            <div className="py-10 text-center">
+                                <MessageSquare size={24} className="text-slate-200 mx-auto mb-2" />
+                                <p className="text-xs text-slate-400">No recipients found</p>
                             </div>
                         ) : (
-                            <div className="space-y-2">
+                            <div className="space-y-1">
                                 {recipients.slice(0, 50).map((r, i) => (
-                                    <div key={i} className="flex items-center gap-3 p-3 rounded-2xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100">
-                                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-400">
+                                    <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors">
+                                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-semibold text-slate-500">
                                             {r.name.charAt(0)}
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold text-gray-800 leading-tight">{r.name}</p>
-                                            <p className="text-[10px] font-bold text-gray-400 mt-0.5">{r.phone}</p>
+                                            <p className="text-sm font-medium text-slate-800">{r.name}</p>
+                                            <p className="text-xs text-slate-400">{r.phone}</p>
                                         </div>
                                     </div>
                                 ))}
                                 {recipients.length > 50 && (
-                                    <div className="p-4 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                        + {recipients.length - 50} other recipients
-                                    </div>
+                                    <p className="text-center text-xs text-slate-400 py-3">
+                                        + {recipients.length - 50} more recipients
+                                    </p>
                                 )}
                             </div>
                         )}

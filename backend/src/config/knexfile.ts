@@ -11,17 +11,28 @@ const connection = {
     connectionTimeoutMillis: config.db.connectionTimeoutMs,
 };
 
-// afterCreate hook: sets app.bypass_rls = 'on' so the backend's privileged
-// connection bypasses Row-Level Security (RLS is enforced at app level via school_id).
-// For Supabase with service_role key, the role already has BYPASSRLS, so this
-// is a belt-and-suspenders safety measure for self-hosted deployments.
+// afterCreate hook — runs for every new connection acquired from the pool.
+//   1. Bypasses RLS  — app-level school_id filter is the primary tenant fence;
+//      this is a belt-and-suspenders guard for self-hosted Postgres.
+//   2. statement_timeout — kills runaway queries before the 30 s HTTP timeout fires.
+//   3. lock_timeout      — prevents deadlocks from stalling the pool indefinitely.
+const STATEMENT_TIMEOUT_MS = parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || '25000');
+const LOCK_TIMEOUT_MS      = parseInt(process.env.DB_LOCK_TIMEOUT_MS      || '5000');
+
 type PgConn = { query: (sql: string, cb: (err: Error | null) => void) => void };
-const bypassRlsAfterCreate = (
+
+const afterCreate = (
     conn: PgConn,
     done: (err: Error | null, conn: PgConn) => void,
 ): void => {
-    conn.query("SET app.bypass_rls = 'on'", (err) => {
-        done(err, conn);
+    conn.query("SET app.bypass_rls = 'on'", (err1) => {
+        if (err1) return done(err1, conn);
+        conn.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`, (err2) => {
+            if (err2) return done(err2, conn);
+            conn.query(`SET lock_timeout = ${LOCK_TIMEOUT_MS}`, (err3) => {
+                done(err3, conn);
+            });
+        });
     });
 };
 
@@ -33,7 +44,7 @@ const knexConfig: { [key: string]: Knex.Config } = {
         pool: {
             min: 0,
             max: 2,
-            afterCreate: bypassRlsAfterCreate,
+            afterCreate,
         },
         migrations: { directory: '../migrations', extension: 'ts' },
     },
@@ -49,7 +60,7 @@ const knexConfig: { [key: string]: Knex.Config } = {
             createRetryIntervalMillis: 200,
             reapIntervalMillis: 1000,
             propagateCreateError: false,
-            afterCreate: bypassRlsAfterCreate,
+            afterCreate,
         },
         acquireConnectionTimeout: config.db.acquireTimeoutMs,
         migrations: {
@@ -73,7 +84,7 @@ const knexConfig: { [key: string]: Knex.Config } = {
             createRetryIntervalMillis: 200,
             reapIntervalMillis: 1000,
             propagateCreateError: false,
-            afterCreate: bypassRlsAfterCreate,
+            afterCreate,
         },
         acquireConnectionTimeout: config.db.acquireTimeoutMs,
         migrations: {

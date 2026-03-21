@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'react-hot-toast';
+import { Copy, RefreshCw, Globe, Code } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:5000';
 const PUBLIC_ENDPOINT = `${API_BASE}/api/public/enquiry`;
-// The ERP_API_KEY is a server-side secret — we only show a masked hint, not the full value
 const API_KEY_HINT = 'ndps_erp_****  (set in backend .env as ERP_API_KEY)';
 
 export default function WebsiteIntegrationPage() {
@@ -20,31 +20,22 @@ export default function WebsiteIntegrationPage() {
 
     useEffect(() => {
         let isActive = true;
-
         (async () => {
             try {
                 const data = await api.getWebsiteToken();
                 const profileApi = api as unknown as { getSchoolProfile?: () => Promise<{ id?: number }> };
                 const profile = profileApi.getSchoolProfile ? await profileApi.getSchoolProfile() : null;
                 if (!isActive) return;
-
                 setToken(data.website_token);
                 setSchoolName(data.school_name);
                 if (profile?.id) setSchoolId(profile.id);
             } catch {
-                if (isActive) {
-                    toast.error('Failed to load integration settings');
-                }
+                if (isActive) toast.error('Failed to load integration settings');
             } finally {
-                if (isActive) {
-                    setLoading(false);
-                }
+                if (isActive) setLoading(false);
             }
         })();
-
-        return () => {
-            isActive = false;
-        };
+        return () => { isActive = false; };
     }, []);
 
     const copyToClipboard = (text: string, label = 'Copied!') => {
@@ -52,9 +43,6 @@ export default function WebsiteIntegrationPage() {
     };
 
     const handleRegenerate = async () => {
-        if (!confirm(
-            'Regenerating the token will break any existing website integration until you update the token there. Continue?'
-        )) return;
         setRegenerating(true);
         try {
             const data = await api.regenerateWebsiteToken();
@@ -66,9 +54,7 @@ export default function WebsiteIntegrationPage() {
         setRegenerating(false);
     };
 
-    // ── Code snippets — API Key method (primary) ──
     const htmlApiKey = `<!-- ${schoolName} Admission Enquiry Form -->
-<!-- Uses ERP_API_KEY header — keep the key on your server, not in browser JS -->
 <form id="admissionEnquiryForm">
   <input type="text"  name="student_name"  placeholder="Child's Full Name *" required />
   <input type="text"  name="father_name"   placeholder="Father's Name *"     required />
@@ -87,7 +73,7 @@ document.getElementById('admissionEnquiryForm').addEventListener('submit', async
   e.preventDefault();
   const fd   = new FormData(this);
   const body = Object.fromEntries(fd.entries());
-  body.school_id = ${schoolId ?? 'YOUR_SCHOOL_ID'}; // add school_id when using API key auth
+  body.school_id = ${schoolId ?? 'YOUR_SCHOOL_ID'};
 
   const msg = document.getElementById('enquiryMsg');
   try {
@@ -113,7 +99,6 @@ document.getElementById('admissionEnquiryForm').addEventListener('submit', async
 </script>`;
 
     const jsApiKey = `// Recommended: call this from YOUR SERVER (Node/PHP/etc.) to keep the API key hidden
-// POST to your own backend route which then calls the ERP API
 
 // --- Your server-side handler (Node.js / Express example) ---
 app.post('/submit-enquiry', async (req, res) => {
@@ -152,7 +137,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       'x-api-key': process.env.ERP_API_KEY!, // in your website's .env.local
     },
     body: JSON.stringify({
-      school_id:     ${schoolId ?? 'YOUR_SCHOOL_ID'},
+      school_id: ${schoolId ?? 'YOUR_SCHOOL_ID'},
       ...req.body,
     }),
   });
@@ -171,16 +156,12 @@ async function submitEnquiry(formData: Record<string, string>) {
   return res.json();
 }`;
 
-    // ── Code snippets — school_token method (alternative) ──
     const htmlToken = `<!-- ${schoolName} Admission Enquiry Form — using school_token -->
 <form id="admissionEnquiryForm">
   <input type="text"  name="student_name"  placeholder="Child's Full Name *" required />
   <input type="text"  name="father_name"   placeholder="Father's Name *"     required />
   <input type="tel"   name="contact_phone" placeholder="Phone Number *"      required />
   <input type="email" name="email"         placeholder="Email Address" />
-  <input type="text"  name="mother_name"   placeholder="Mother's Name" />
-  <textarea           name="address"       placeholder="Address"></textarea>
-  <textarea           name="notes"         placeholder="Message / Query"></textarea>
   <button type="submit">Submit Enquiry</button>
   <p id="enquiryMsg"></p>
 </form>
@@ -214,61 +195,56 @@ document.getElementById('admissionEnquiryForm').addEventListener('submit', async
 
     const snippets = authMethod === 'apikey'
         ? { html: htmlApiKey, js: jsApiKey, react: reactApiKey }
-        : { html: htmlToken, js: jsApiKey.replace(/x-api-key.*\n.*ERP_API_KEY.*/, '// no header needed — school_token in body'), react: reactApiKey };
+        : { html: htmlToken, js: jsApiKey, react: reactApiKey };
 
     const tabLabels = { html: 'HTML + Script', js: 'Node.js (Server)', react: 'Next.js API Route' };
 
-    if (loading) {
-        return (
-            <div className="p-6 animate-pulse space-y-6">
-                <div className="h-10 bg-gray-100 rounded-2xl w-64" />
-                <div className="h-40 bg-gray-100 rounded-3xl" />
-            </div>
-        );
-    }
+    if (loading) return (
+        <div className="space-y-6 animate-pulse">
+            <div className="h-10 bg-slate-100 rounded-xl w-64" />
+            <div className="h-40 bg-slate-100 rounded-xl" />
+        </div>
+    );
 
     return (
-        <div className="p-6 space-y-8 animate-fade-in">
-            {/* Header */}
+        <div className="space-y-8">
             <div>
-                <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-                    <span className="w-12 h-12 rounded-2xl bg-[#f1f0ff] flex items-center justify-center text-2xl shadow-sm">🌐</span>
+                <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+                    <Globe size={24} className="text-[#6c5ce7]" />
                     Website Integration
                 </h1>
-                <p className="text-gray-500 text-sm mt-1.5 font-medium ml-1">
-                    Connect your school website — every admission enquiry submitted there appears instantly in the ERP.
+                <p className="text-sm text-slate-500 mt-0.5">
+                    Connect your school website — admission enquiries submitted there appear instantly in the ERP.
                 </p>
             </div>
 
             {/* How it works */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
-                    { step: '1', icon: '🔑', title: 'Get your credentials', desc: 'Use the ERP API Key (recommended) or the per-school token below.' },
-                    { step: '2', icon: '🖥️', title: 'Add to your website', desc: 'Paste the code snippet into your website\'s enquiry form page.' },
-                    { step: '3', icon: '📥', title: 'Enquiries flow in', desc: 'Every submission appears in Front Desk → Enquiry (source: website).' },
-                ].map(({ step, icon, title, desc }) => (
-                    <div key={step} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex gap-4 items-start">
-                        <div className="w-10 h-10 rounded-2xl bg-[#6c5ce7] text-white flex items-center justify-center font-black text-sm flex-shrink-0">{step}</div>
+                    { step: '1', title: 'Get your credentials', desc: 'Use the ERP API Key (recommended) or the per-school token below.' },
+                    { step: '2', title: 'Add to your website', desc: "Paste the code snippet into your website's enquiry form page." },
+                    { step: '3', title: 'Enquiries flow in', desc: 'Every submission appears in Front Desk → Enquiry (source: website).' },
+                ].map(({ step, title, desc }) => (
+                    <div key={step} className="bg-white rounded-xl border border-slate-100 shadow-sm p-5 flex gap-4 items-start">
+                        <div className="w-8 h-8 rounded-lg bg-[#6c5ce7] text-white flex items-center justify-center font-bold text-sm flex-shrink-0">{step}</div>
                         <div>
-                            <p className="font-bold text-gray-900 flex items-center gap-2">{icon} {title}</p>
-                            <p className="text-xs text-gray-500 mt-1">{desc}</p>
+                            <p className="font-semibold text-slate-900 text-sm">{title}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* Credentials card */}
-            <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm p-10 space-y-8 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-2 h-full bg-[#6c5ce7]" />
-
+            {/* Credentials */}
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6 space-y-6">
                 {/* API endpoint */}
                 <div>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">API Endpoint (POST)</p>
-                    <div className="flex items-center gap-3 bg-gray-50 rounded-2xl px-5 py-3">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">API Endpoint (POST)</p>
+                    <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-3">
                         <span className="text-sm font-mono text-[#6c5ce7] truncate flex-1">{PUBLIC_ENDPOINT}</span>
                         <button onClick={() => copyToClipboard(PUBLIC_ENDPOINT, 'Endpoint copied!')}
-                            className="px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-[#f1f0ff] text-[#6c5ce7] rounded-xl hover:bg-[#f1f0ff] transition flex-shrink-0">
-                            Copy
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#f1f0ff] text-[#6c5ce7] rounded-lg hover:bg-[#f1f0ff] flex-shrink-0">
+                            <Copy size={12} /> Copy
                         </button>
                     </div>
                 </div>
@@ -276,64 +252,63 @@ document.getElementById('admissionEnquiryForm').addEventListener('submit', async
                 {/* School ID */}
                 {schoolId && (
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Your School ID</p>
-                        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl px-5 py-3">
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Your School ID</p>
+                        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-lg px-4 py-3">
                             <span className="text-sm font-mono text-emerald-800 flex-1 font-bold">{schoolId}</span>
                             <button onClick={() => copyToClipboard(String(schoolId), 'School ID copied!')}
-                                className="px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 rounded-xl hover:bg-emerald-200 transition flex-shrink-0">
-                                Copy
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 flex-shrink-0">
+                                <Copy size={12} /> Copy
                             </button>
                         </div>
-                        <p className="text-xs text-gray-400 mt-1.5 ml-1">Send this as <code className="bg-gray-100 px-1 rounded text-xs">school_id</code> in the request body when using the API key method.</p>
+                        <p className="text-xs text-slate-400 mt-1.5">Send as <code className="bg-slate-100 px-1 rounded text-xs">school_id</code> in the request body when using the API key method.</p>
                     </div>
                 )}
 
-                {/* Method tabs */}
+                {/* Method selection */}
                 <div>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Authentication Method</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Authentication Method</p>
                     <div className="flex gap-3">
                         <button onClick={() => setAuthMethod('apikey')}
-                            className={`px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border-2 ${authMethod === 'apikey' ? 'bg-[#6c5ce7] text-white border-[#6c5ce7] shadow-lg' : 'bg-white text-gray-400 border-gray-100 hover:border-[#f1f0ff]'}`}>
-                            ERP API Key (Recommended)
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${authMethod === 'apikey' ? 'bg-[#6c5ce7] text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                            API Key (Recommended)
                         </button>
                         <button onClick={() => setAuthMethod('token')}
-                            className={`px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border-2 ${authMethod === 'token' ? 'bg-[#6c5ce7] text-white border-[#6c5ce7] shadow-lg' : 'bg-white text-gray-400 border-gray-100 hover:border-[#f1f0ff]'}`}>
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${authMethod === 'token' ? 'bg-[#6c5ce7] text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                             School Token
                         </button>
                     </div>
                 </div>
 
-                {/* API Key info */}
                 {authMethod === 'apikey' ? (
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-2xl px-5 py-4">
-                            <span className="text-xl">🔑</span>
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
                             <div className="flex-1">
-                                <p className="text-sm font-bold text-amber-800">ERP API Key is configured</p>
+                                <p className="text-sm font-semibold text-amber-800">ERP API Key is configured</p>
                                 <p className="text-xs text-amber-600 font-mono mt-0.5">{API_KEY_HINT}</p>
                             </div>
                         </div>
-                        <p className="text-xs text-gray-500 ml-1">
-                            Send as <code className="bg-gray-100 px-1 rounded text-xs">x-api-key</code> HTTP header.
-                            Always use a <strong>server-side proxy</strong> (Node/PHP/Next.js API route) so the key never leaks in browser source code.
+                        <p className="text-xs text-slate-500">
+                            Send as <code className="bg-slate-100 px-1 rounded text-xs">x-api-key</code> HTTP header.
+                            Always use a <strong>server-side proxy</strong> so the key never appears in browser source code.
                         </p>
                     </div>
                 ) : (
                     <div className="space-y-3">
                         <div>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">School Token</p>
-                            <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-2xl px-5 py-3">
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">School Token</p>
+                            <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
                                 <span className="text-sm font-mono text-amber-800 truncate flex-1 select-all">{token}</span>
                                 <button onClick={() => copyToClipboard(token, 'Token copied!')}
-                                    className="px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 rounded-xl hover:bg-amber-200 transition flex-shrink-0">
-                                    Copy
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 flex-shrink-0">
+                                    <Copy size={12} /> Copy
                                 </button>
                             </div>
-                            <p className="text-xs text-gray-400 mt-1.5 ml-1">Send as <code className="bg-gray-100 px-1 rounded text-xs">school_token</code> in the request body.</p>
+                            <p className="text-xs text-slate-400 mt-1.5">Send as <code className="bg-slate-100 px-1 rounded text-xs">school_token</code> in the request body.</p>
                         </div>
                         <div className="flex justify-end">
                             <button onClick={handleRegenerate} disabled={regenerating}
-                                className="px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-rose-500 border border-rose-100 rounded-xl hover:bg-rose-50 transition disabled:opacity-50">
+                                className="flex items-center gap-2 px-4 py-2 text-sm text-red-500 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50">
+                                <RefreshCw size={14} className={regenerating ? 'animate-spin' : ''} />
                                 {regenerating ? 'Regenerating...' : 'Regenerate Token'}
                             </button>
                         </div>
@@ -342,55 +317,56 @@ document.getElementById('admissionEnquiryForm').addEventListener('submit', async
             </div>
 
             {/* Code snippets */}
-            <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden">
-                <div className="p-8 border-b border-gray-50 flex items-center justify-between">
-                    <div>
-                        <h3 className="text-lg font-black text-gray-900 flex items-center gap-3">
-                            <span className="text-xl">{'</>'}</span> Integration Code
-                            <span className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase ${authMethod === 'apikey' ? 'bg-[#f1f0ff] text-[#6c5ce7]' : 'bg-amber-50 text-amber-600'}`}>
-                                {authMethod === 'apikey' ? 'API Key method' : 'Token method'}
-                            </span>
-                        </h3>
-                        <p className="text-xs text-gray-400 mt-1">Paste this into your school website to connect it with the ERP.</p>
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <Code size={18} className="text-[#6c5ce7]" />
+                        <div>
+                            <h3 className="font-semibold text-slate-900 text-sm">Integration Code</h3>
+                            <p className="text-xs text-slate-400">Paste into your school website to connect it with the ERP</p>
+                        </div>
                     </div>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${authMethod === 'apikey' ? 'bg-[#f1f0ff] text-[#6c5ce7]' : 'bg-amber-50 text-amber-600'}`}>
+                        {authMethod === 'apikey' ? 'API Key method' : 'Token method'}
+                    </span>
                 </div>
 
-                {/* Tab bar */}
-                <div className="flex border-b border-gray-50 px-8">
+                <div className="flex border-b border-slate-100 px-6">
                     {(Object.keys(tabLabels) as Array<keyof typeof tabLabels>).map(tab => (
                         <button key={tab} onClick={() => setActiveTab(tab as any)}
-                            className={`px-5 py-4 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === tab ? 'border-[#6c5ce7] text-[#6c5ce7]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                            className={`px-4 py-3 text-xs font-medium border-b-2 transition-all ${activeTab === tab ? 'border-[#6c5ce7] text-[#6c5ce7]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
                             {tabLabels[tab]}
                         </button>
                     ))}
                 </div>
 
-                {/* Code block */}
                 <div className="relative">
-                    <pre className="overflow-x-auto p-8 text-xs text-gray-700 bg-gray-50 leading-relaxed font-mono whitespace-pre">
+                    <pre className="overflow-x-auto p-6 text-xs text-slate-700 bg-slate-50 leading-relaxed font-mono whitespace-pre">
                         {snippets[activeTab as keyof typeof snippets]}
                     </pre>
                     <button onClick={() => copyToClipboard(snippets[activeTab as keyof typeof snippets], 'Code copied!')}
-                        className="absolute top-4 right-4 px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-[#6c5ce7] hover:border-[#6c5ce7]/20 shadow-sm transition">
-                        Copy Code
+                        className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-500 hover:text-[#6c5ce7] hover:border-[#6c5ce7]/20 shadow-sm transition">
+                        <Copy size={12} /> Copy Code
                     </button>
                 </div>
             </div>
 
             {/* Fields reference */}
-            <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm p-10">
-                <h3 className="text-lg font-black text-gray-900 mb-6">API Fields Reference</h3>
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100">
+                    <h3 className="font-semibold text-slate-900 text-sm">API Fields Reference</h3>
+                </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="bg-gray-50">
-                                <th className="px-5 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Field</th>
-                                <th className="px-5 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Type</th>
-                                <th className="px-5 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Required</th>
-                                <th className="px-5 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Description</th>
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 border-b border-slate-100">
+                            <tr>
+                                <th className="px-5 py-3 text-xs font-medium text-slate-500">Field</th>
+                                <th className="px-5 py-3 text-xs font-medium text-slate-500">Type</th>
+                                <th className="px-5 py-3 text-xs font-medium text-slate-500">Required</th>
+                                <th className="px-5 py-3 text-xs font-medium text-slate-500">Description</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50">
+                        <tbody className="divide-y divide-slate-50">
                             {[
                                 { field: 'x-api-key', type: 'header', req: 'If using API key', desc: 'Your ERP_API_KEY — send as HTTP header (server-side only)' },
                                 { field: 'school_id', type: 'integer', req: 'With API key', desc: 'Your school ID (shown above)' },
@@ -403,23 +379,23 @@ document.getElementById('admissionEnquiryForm').addEventListener('submit', async
                                 { field: 'address', type: 'string', req: 'No', desc: 'Residential address' },
                                 { field: 'notes', type: 'string', req: 'No', desc: 'Message or query from parent' },
                             ].map(row => (
-                                <tr key={row.field}>
-                                    <td className="px-5 py-4 font-mono text-[#6c5ce7] font-semibold">{row.field}</td>
-                                    <td className="px-5 py-4 text-gray-500">{row.type}</td>
-                                    <td className="px-5 py-4">
-                                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${row.req === 'Yes' ? 'bg-rose-50 text-rose-500' : row.req.startsWith('If') || row.req.startsWith('With') ? 'bg-amber-50 text-amber-500' : 'bg-gray-50 text-gray-400'}`}>
+                                <tr key={row.field} className="hover:bg-slate-50/50">
+                                    <td className="px-5 py-3 font-mono text-[#6c5ce7] font-semibold text-xs">{row.field}</td>
+                                    <td className="px-5 py-3 text-slate-500">{row.type}</td>
+                                    <td className="px-5 py-3">
+                                        <span className={`px-2 py-1 rounded text-xs font-medium ${row.req === 'Yes' ? 'bg-red-50 text-red-600' : row.req.startsWith('If') || row.req.startsWith('With') ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
                                             {row.req}
                                         </span>
                                     </td>
-                                    <td className="px-5 py-4 text-gray-500">{row.desc}</td>
+                                    <td className="px-5 py-3 text-slate-500">{row.desc}</td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
-                <div className="mt-6 p-5 bg-emerald-50 rounded-2xl border border-emerald-100">
-                    <p className="text-xs font-bold text-emerald-700">Success Response (HTTP 201)</p>
-                    <pre className="text-xs font-mono text-emerald-600 mt-2">{`{ "success": true, "message": "Enquiry submitted successfully...", "enquiry_number": "ENQ/2026/0001" }`}</pre>
+                <div className="p-5 m-5 bg-emerald-50 rounded-lg border border-emerald-100">
+                    <p className="text-xs font-semibold text-emerald-700 mb-1">Success Response (HTTP 201)</p>
+                    <pre className="text-xs font-mono text-emerald-600">{`{ "success": true, "message": "Enquiry submitted successfully...", "enquiry_number": "ENQ/2026/0001" }`}</pre>
                 </div>
             </div>
         </div>

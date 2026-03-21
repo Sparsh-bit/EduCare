@@ -1,22 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
 import { useState } from 'react';
-
-const fadeUp = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 }
-};
-
-const staggerContainer = {
-    hidden: { opacity: 0 },
-    visible: {
-        opacity: 1,
-        transition: {
-            staggerChildren: 0.1
-        }
-    }
-};
 
 const fullFeatures = [
     {
@@ -133,46 +117,27 @@ export default function FeaturesPage() {
 
             {/* ─── Header Section ─── */}
             <section className="pt-32 pb-16 px-6 max-w-4xl mx-auto text-center">
-                <motion.p
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="text-xs font-medium text-[#6c5ce7]/50 tracking-[0.2em] uppercase mb-4"
-                >
+                <p className="text-xs font-medium text-[#6c5ce7]/50 tracking-[0.2em] uppercase mb-4">
                     EduCare Core Modules
-                </motion.p>
-                <motion.h1
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.7, delay: 0.1 }}
+                </p>
+                <h1
                     className="text-4xl md:text-6xl font-light text-[#6c5ce7] leading-tight mb-6"
                     style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}
                 >
                     Engineered for excellence, <br className="hidden md:block" /> built for Indian schools.
-                </motion.h1>
-                <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.7, delay: 0.3 }}
-                    className="text-lg text-[#6c5ce7]/60 leading-relaxed"
-                >
+                </h1>
+                <p className="text-lg text-[#6c5ce7]/60 leading-relaxed">
                     Explore the exhaustive suite of features designed to eliminate paperwork and bring
                     real-time transparency to administrators, teachers, and parents alike.
-                </motion.p>
+                </p>
             </section>
 
             {/* ─── Features Grid ─── */}
             <section className="py-12 px-6 max-w-6xl mx-auto">
-                <motion.div
-                    variants={staggerContainer}
-                    initial="hidden"
-                    animate="visible"
-                    className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12"
-                >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
                     {fullFeatures.map((feature, idx) => (
-                        <motion.div
+                        <div
                             key={idx}
-                            variants={fadeUp}
                             className="group bg-white/60 backdrop-blur-sm border border-[#6c5ce7]/10 rounded-3xl p-8 md:p-10 hover:shadow-xl hover:shadow-[#6c5ce7]/5 hover:-translate-y-1 transition-all duration-500 relative overflow-hidden"
                         >
                             {/* Subtle background gradient on hover */}
@@ -199,32 +164,25 @@ export default function FeaturesPage() {
                                     ))}
                                 </ul>
                             </div>
-                        </motion.div>
+                        </div>
                     ))}
-                </motion.div>
+                </div>
             </section>
 
             {/* ─── CTA Section ─── */}
             <section className="py-24 px-6 text-center">
-                <motion.div
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true }}
-                    variants={fadeUp}
+                <h2 className="text-3xl font-light text-[#6c5ce7] mb-8" style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+                    Ready to upgrade your school&apos;s digital infrastructure?
+                </h2>
+                <Link
+                    href="/register"
+                    className="inline-flex items-center gap-2 px-8 py-4 text-base font-medium text-[#f8f9fb] bg-[#6c5ce7] rounded-full hover:bg-[#5b4bd5] transition-all hover:shadow-lg shadow-[#6c5ce7]/20"
                 >
-                    <h2 className="text-3xl font-light text-[#6c5ce7] mb-8" style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
-                        Ready to upgrade your school&apos;s digital infrastructure?
-                    </h2>
-                    <Link
-                        href="/register"
-                        className="inline-flex items-center gap-2 px-8 py-4 text-base font-medium text-[#f8f9fb] bg-[#6c5ce7] rounded-full hover:bg-[#5b4bd5] transition-all hover:shadow-lg shadow-[#6c5ce7]/20"
-                    >
-                        REQUEST EDUCARE SETUP
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
-                    </Link>
-                </motion.div>
+                    REQUEST EDUCARE SETUP
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                </Link>
             </section>
 
             {/* ─── Footer ─── */}

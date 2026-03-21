@@ -4,7 +4,7 @@ import type {
     LoginResponse, User, Student, StudentListResponse, AttendanceRecord,
     ClassAttendanceResponse, StudentAttendanceSummary, AttendanceEligibility,
     FeeStructure, FeePayment, StudentFeeStatus, FeeDuesResponse, FeeCollectionSummary,
-    FeeSettings, Exam, ExamResultsResponse, ReportCard, Mark,
+    FeeSettings, Exam, ExamResultsResponse, ReportCard,
     StaffMember, StaffListResponse, Leave, SalaryRecord,
     DashboardStats, Notice, Class, Section, AdmissionEnquiry, EnquiryStats,
     GatePass, Visitor, PostalRecord, LostFoundItem, IncomeEntry, ExpenseEntry,
@@ -13,23 +13,9 @@ import type {
     MasterDataItem, ParentChildFee, ParentExamResult, AccountsEntriesResponse,
 } from './types';
 
-const EXPECTED_API_ERROR_MESSAGES = [
-    'Unauthorized',
-    'Access denied. You do not have permission to perform this action.',
-    'Too many requests. Please wait a moment and try again.',
-    'Server unavailable. Please check backend connection and try again.',
-];
-
-export function isExpectedApiError(error: unknown): boolean {
-    if (!(error instanceof Error)) return false;
-    return EXPECTED_API_ERROR_MESSAGES.includes(error.message);
-}
-
-export function reportApiError(error: unknown): void {
-    // Expected auth/permission/rate-limit/network responses are user-facing and
-    // shouldn't flood dev overlay as "Console Error".
-    if (isExpectedApiError(error)) return;
-    console.error(error);
+export function reportApiError(_error: unknown): void {
+    // All API errors are user-facing (callers show toast.error).
+    // Intentionally silent — do not console.error, it floods the Next.js dev overlay.
 }
 
 class ApiClient {
@@ -108,6 +94,20 @@ class ApiClient {
 
     async logout() {
         return this.request<{ message: string }>('/auth/logout', { method: 'POST' });
+    }
+
+    async forgotPassword(username: string, schoolCode?: string) {
+        return this.request<{ message: string }>('/auth/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ username, ...(schoolCode && { school_code: schoolCode }) }),
+        });
+    }
+
+    async resetPassword(token: string, newPassword: string) {
+        return this.request<{ message: string }>('/auth/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({ token, newPassword }),
+        });
     }
 
     async sendVerificationOtp() {
@@ -219,7 +219,7 @@ class ApiClient {
     }
 
     // ─── Attendance ───
-    async markAttendance(data: { class_id: number; section_id: number; date: string; records: AttendanceRecord[] }) {
+    async markAttendance(data: { class_id: number; section_id: number; date: string; records: { student_id: number; status: string }[] }) {
         return this.request<{ message: string }>('/attendance/mark', { method: 'POST', body: JSON.stringify(data) });
     }
 
@@ -249,7 +249,7 @@ class ApiClient {
         return this.request<FeeStructure>(`/fees/structure/${classId}`);
     }
 
-    async payCash(data: { student_id: number; installment_id: number; amount_paid: number; notes?: string }) {
+    async payCash(data: { student_id: number; installment_id: number; amount_paid: number; notes?: string; payment_mode?: 'cash' | 'cheque' | 'bank' | 'dd' }) {
         return this.request<FeePayment>('/fees/pay/cash', { method: 'POST', body: JSON.stringify(data) });
     }
 
@@ -286,6 +286,10 @@ class ApiClient {
         return this.request<{ message: string }>('/fees/settings', { method: 'POST', body: JSON.stringify(data) });
     }
 
+    async sendFeeReminders(student_ids?: number[]) {
+        return this.request<{ message: string }>('/fees/send-reminder', { method: 'POST', body: JSON.stringify({ student_ids }) });
+    }
+
     // ─── Exams ───
     async createExam(data: Partial<Exam>) {
         return this.request<Exam>('/exams', { method: 'POST', body: JSON.stringify(data) });
@@ -304,7 +308,7 @@ class ApiClient {
         return this.request<Exam>(`/exams/${examId}`);
     }
 
-    async enterMarks(examId: number, data: { marks: Mark[] }) {
+    async enterMarks(examId: number, data: { exam_subject_id: number; marks: Array<{ student_id: number; marks_obtained?: number; is_absent?: boolean }> }) {
         return this.request<{ message: string }>(`/exams/${examId}/marks`, { method: 'POST', body: JSON.stringify(data) });
     }
 
@@ -327,6 +331,11 @@ class ApiClient {
         return this.request<StaffListResponse>(`/staff${query}`);
     }
 
+    async getStaff(id: number): Promise<StaffMember | null> {
+        const res = await this.request<StaffListResponse>('/staff');
+        return ((res as StaffListResponse).data ?? []).find(s => s.id === id) ?? null;
+    }
+
     async updateStaff(id: number, data: Partial<StaffMember>) {
         return this.request<StaffMember>(`/staff/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     }
@@ -335,13 +344,21 @@ class ApiClient {
         return this.request<Leave>('/staff/leave', { method: 'POST', body: JSON.stringify(data) });
     }
 
-    async updateLeave(id: number, status: string) {
-        return this.request<Leave>(`/staff/leave/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
+    async updateLeave(id: number, status: string, rejection_reason?: string) {
+        return this.request<Leave>(`/staff/leave/${id}`, { method: 'PUT', body: JSON.stringify({ status, ...(rejection_reason && { rejection_reason }) }) });
     }
 
     async getLeaves(params?: Record<string, string | number>) {
         const query = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
         return this.request<Leave[]>(`/staff/leaves${query}`);
+    }
+
+    async getMyLeaveBalances() {
+        return this.request<Array<{ leave_type_name: string; code: string; allocated: number; used: number; remaining: number }>>('/staff/my/leave-balances');
+    }
+
+    async getAllLeaveBalances() {
+        return this.request<Array<{ staff_id: number; staff_name: string; designation: string; department: string; balances: Array<{ leave_type_name: string; code: string; allocated: number; used: number; remaining: number }> }>>('/staff/all-leave-balances');
     }
 
     async processSalary(month: number, year: number) {
@@ -411,6 +428,18 @@ class ApiClient {
 
     async getNotices() {
         return this.request<Notice[]>('/notices');
+    }
+
+    async deleteNotice(id: number) {
+        return this.request<void>(`/notices/${id}`, { method: 'DELETE' });
+    }
+
+    async postHomework(data: { title: string; description: string; class_id: number; section_id: number; subject_id: number; due_date: string }) {
+        return this.request<Record<string, unknown>>('/notices/homework', { method: 'POST', body: JSON.stringify(data) });
+    }
+
+    async getHomework(classId: number, sectionId: number) {
+        return this.request<Array<Record<string, unknown>>>(`/notices/homework/${classId}/${sectionId}`);
     }
 
     // ─── Utility ───
@@ -719,7 +748,7 @@ class ApiClient {
     async getPtSlabs() { return this.request<Array<Record<string, unknown>>>('/tax/pt-slabs'); }
     async savePtSlab(data: Record<string, unknown>) { return this.request<Record<string, unknown>>('/tax/pt-slabs', { method: 'POST', body: JSON.stringify(data) }); }
     async getSalaryStructure(staffId: number) { return this.request<Record<string, unknown>>(`/tax/salary-structure/${staffId}`); }
-    async saveSalaryStructure(staffId: number, data: Record<string, unknown>) { return this.request<Record<string, unknown>>(`/tax/salary-structure/${staffId}`, { method: 'POST', body: JSON.stringify(data) }); }
+    async saveSalaryStructure(staffId: number, data: Record<string, unknown>) { return this.request<Record<string, unknown>>('/tax/salary-structure', { method: 'POST', body: JSON.stringify({ ...data, staff_id: staffId }) }); }
     async getPayrollRecords(params?: Record<string, string>) {
         const q = params ? '?' + new URLSearchParams(params).toString() : '';
         return this.request<{ data: SalaryRecord[] }>(`/tax/payroll${q}`);

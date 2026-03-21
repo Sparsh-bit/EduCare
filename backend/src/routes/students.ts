@@ -15,6 +15,7 @@ import fs from 'fs';
 import { config } from '../config';
 import ExcelJS from 'exceljs';
 import { parse as parseCsv } from 'csv-parse/sync';
+import { validateMagicBytes } from '../utils/magicBytes';
 
 const router = Router();
 
@@ -27,10 +28,17 @@ const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
 
 const ALLOWED_DOCUMENT_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.webp']);
 
-// File upload config
+// File upload config — files are stored in {uploadDir}/{schoolId}/ so each school's
+// documents are isolated on disk and cannot be accessed across tenants.
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, config.uploadDir),
-    filename: (req, file, cb) => {
+    destination: (req, _file, cb) => {
+        // req.user is set by authenticate middleware which runs before multer
+        const schoolId = (req as AuthRequest).user?.school_id || 'unknown';
+        const dest = path.join(config.uploadDir, String(schoolId));
+        fs.mkdirSync(dest, { recursive: true });
+        cb(null, dest);
+    },
+    filename: (_req, file, cb) => {
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
         cb(null, uniqueName);
     },
@@ -371,11 +379,43 @@ router.post('/ai/suggest-class', authenticate, validate([
             classNames
         );
 
-        const matchedClass = classes.find((c: any) =>
-            c.name.toLowerCase() === suggestion.suggested_class.toLowerCase()
-            || c.name.toLowerCase().includes(suggestion.suggested_class.toLowerCase())
-            || suggestion.suggested_class.toLowerCase().includes(c.name.toLowerCase())
-        );
+        const suggestedLower = suggestion.suggested_class.toLowerCase();
+        
+        // Priority 1: Exact match
+        let matchedClass = classes.find((c: any) => c.name.toLowerCase() === suggestedLower);
+
+        // Priority 2: Semantic match (e.g. "1" matches "Class 1")
+        if (!matchedClass) {
+            matchedClass = classes.find((c: any) => {
+                const nameLower = c.name.toLowerCase();
+                return nameLower === suggestedLower 
+                    || nameLower === `class ${suggestedLower}` 
+                    || `class ${nameLower}` === suggestedLower;
+            });
+        }
+
+        // Priority 3: Numeric match (e.g. "11" suggested, "Grade 11" exists)
+        if (!matchedClass) {
+            const numSuggested = suggestedLower.match(/\d+/)?.[0];
+            if (numSuggested) {
+                matchedClass = classes.find((c: any) => {
+                    const numClass = c.name.match(/\d+/)?.[0];
+                    return numClass === numSuggested;
+                });
+            }
+        }
+
+        // Priority 4: Fuzzy includes (last resort, stricter)
+        if (!matchedClass) {
+            matchedClass = classes.find((c: any) => {
+                const nameLower = c.name.toLowerCase();
+                const cleanSuggested = suggestedLower.replace(/class|grade|std\.?|standard/g, '').trim();
+                const cleanName = nameLower.replace(/class|grade|std\.?|standard/g, '').trim();
+                
+                // Only match if the identifying part is exactly the same or a very clear prefix
+                return cleanName === cleanSuggested;
+            });
+        }
 
         res.json({
             suggested_class: suggestion.suggested_class,
@@ -849,10 +889,30 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
             .orderBy('row_number');
 
         if (!validItems.length) {
+            const allItems = await db('student_import_batch_items')
+                .where({ batch_id: batchId, school_id: schoolId })
+                .count('id as count').first();
+            const invalidItems = await db('student_import_batch_items')
+                .where({ batch_id: batchId, school_id: schoolId, status: 'invalid' })
+                .limit(5);
+
             await db('student_import_batches')
                 .where({ id: batchId, school_id: schoolId })
                 .update({ status: 'preview_ready', updated_at: new Date() });
-            return res.status(400).json({ error: 'No valid rows available for insertion' });
+            
+            const total = parseInt((allItems as any)?.count || '0');
+            let errorMsg = 'No valid rows available for insertion.';
+            if (total > 0) {
+                errorMsg += ` Found ${total} total rows, but all have validation errors (likely duplicates or missing required fields like Student Name).`;
+                if (invalidItems.length > 0) {
+                    const sampleError = invalidItems[0].error;
+                    errorMsg += ` Example error: ${sampleError}`;
+                }
+            } else {
+                errorMsg += ' The import file seems to be empty or headers were not recognized.';
+            }
+
+            return res.status(400).json({ error: errorMsg });
         }
 
         const classes = await db('classes').where({ school_id: schoolId }).orderBy('numeric_order');
@@ -1585,12 +1645,30 @@ async function parseXlsxRows(buffer: Buffer): Promise<Array<Record<string, any>>
         throw new Error('No worksheet found in file');
     }
 
-    const headerRow = worksheet.getRow(1);
-    const headerValues = Array.isArray(headerRow.values) ? headerRow.values.slice(1) : [];
-    const headers = headerValues.map((h: unknown) => String(excelCellToPlainValue(h) || '').trim());
+    // Find the first row that actually has content to use as headers
+    let headerRowNumber = 1;
+    let headers: string[] = [];
+    
+    for (let r = 1; r <= Math.min(worksheet.rowCount, 10); r++) {
+        const row = worksheet.getRow(r);
+        const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+        const nonNullValues = values.filter(v => v !== null && v !== undefined && String(v).trim() !== '');
+        if (nonNullValues.length > 2) { // Heuristic: header row usually has at least 3 columns
+            headerRowNumber = r;
+            headers = values.map((h: unknown) => String(excelCellToPlainValue(h) || '').trim());
+            break;
+        }
+    }
+
+    if (headers.length === 0) {
+        // Fallback to row 1 if no content-rich row found in first 10
+        const firstRow = worksheet.getRow(1);
+        const values = Array.isArray(firstRow.values) ? firstRow.values.slice(1) : [];
+        headers = values.map((h: unknown) => String(excelCellToPlainValue(h) || '').trim());
+    }
 
     const dataRows: Array<Record<string, any>> = [];
-    for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+    for (let rowNumber = headerRowNumber + 1; rowNumber <= worksheet.rowCount; rowNumber++) {
         const row = worksheet.getRow(rowNumber);
         const record: Record<string, any> = {};
         let hasAnyValue = false;
@@ -1884,17 +1962,31 @@ router.post('/:id/documents', authenticate, authorize('tenant_admin', 'admin'), 
 
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
+        // Magic-bytes validation — confirms the file content actually matches the
+        // declared MIME type, defeating extension-spoofing attacks.
+        const valid = await validateMagicBytes(req.file.path, req.file.mimetype);
+        if (!valid) {
+            fs.unlinkSync(req.file.path); // remove the rejected file immediately
+            return res.status(415).json({ error: 'File content does not match the declared type. Upload rejected.' });
+        }
+
         const student = await db('students')
             .where({ id: req.params.id, school_id: schoolId })
             .whereNull('deleted_at')
             .first();
-        if (!student) return res.status(404).json({ error: 'Student not found' });
+        if (!student) {
+            fs.unlinkSync(req.file.path);
+            return res.status(404).json({ error: 'Student not found' });
+        }
+
+        // Store URL as /uploads/{schoolId}/{filename} — school-namespaced path
+        const fileUrl = `/uploads/${schoolId}/${req.file.filename}`;
 
         const [doc] = await db('student_documents').insert({
             student_id: student.id,
             doc_type: req.body.doc_type || 'other',
             file_name: req.file.originalname,
-            file_url: `/uploads/${req.file.filename}`, // Replace with S3 URL in production
+            file_url: fileUrl,
             mime_type: req.file.mimetype,
             file_size: req.file.size,
             school_id: schoolId,
@@ -1902,6 +1994,7 @@ router.post('/:id/documents', authenticate, authorize('tenant_admin', 'admin'), 
 
         res.status(201).json(doc);
     } catch (error) {
+        if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         logger.error('Upload document error', error);
         res.status(500).json({ error: 'Internal server error' });
     }

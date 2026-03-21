@@ -3,6 +3,12 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import db from '../config/database';
 
+interface JwtTokenPayload {
+    id: number;
+    iat?: number;
+    exp?: number;
+}
+
 export interface AuthRequest extends Request {
     user?: {
         id: number;
@@ -13,11 +19,26 @@ export interface AuthRequest extends Request {
     };
 }
 
+// ─── User TTL Cache ───
+// Caches DB user lookups for up to 2 minutes to avoid a DB round-trip on every
+// authenticated request. Invalidated explicitly on role changes, deactivation, etc.
+interface CachedUser {
+    data: { id: number; email: string; role: string; name: string; school_id: number };
+    expiresAt: number;
+}
+const _userCache = new Map<number, CachedUser>();
+const USER_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+/** Call this whenever a user's role, status, or school changes. */
+export function invalidateUserCache(userId: number): void {
+    _userCache.delete(userId);
+}
+
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
         // 1. Try HttpOnly cookie first, then Bearer header
         let token: string | undefined;
-        const cookieToken = (req as any).cookies?.auth_token;
+        const cookieToken = req.cookies?.auth_token as string | undefined;
         if (cookieToken) {
             token = cookieToken;
         } else {
@@ -31,24 +52,37 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
             return res.status(401).json({ error: 'Access denied. No token provided.' });
         }
 
-        const decoded = jwt.verify(token, config.jwt.secret) as any;
+        const decoded = jwt.verify(token, config.jwt.secret) as JwtTokenPayload;
 
-        const user = await db('users').where({ id: decoded.id, is_active: true }).first();
+        // 2. Check in-memory cache before hitting the DB
+        const cached = _userCache.get(decoded.id);
+        if (cached && cached.expiresAt > Date.now()) {
+            req.user = cached.data;
+            return next();
+        }
+
+        // 3. Cache miss — fetch from DB
+        const user = await db('users')
+            .select('id', 'email', 'role', 'name', 'school_id')
+            .where({ id: decoded.id, is_active: true })
+            .first();
         if (!user) {
             return res.status(401).json({ error: 'Invalid token. User not found.' });
         }
 
-        req.user = {
-            id: user.id,
-            email: user.email,
-            role: user.role,
-            name: user.name,
-            school_id: user.school_id,
+        const userData = {
+            id: user.id as number,
+            email: user.email as string,
+            role: user.role as string,
+            name: user.name as string,
+            school_id: user.school_id as number,
         };
 
+        _userCache.set(decoded.id, { data: userData, expiresAt: Date.now() + USER_CACHE_TTL });
+        req.user = userData;
         next();
-    } catch (error: any) {
-        if (error.name === 'TokenExpiredError') {
+    } catch (error: unknown) {
+        if (error instanceof jwt.TokenExpiredError) {
             return res.status(401).json({ error: 'Token expired.' });
         }
         return res.status(401).json({ error: 'Invalid token.' });

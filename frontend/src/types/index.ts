@@ -1,10 +1,12 @@
 export interface User {
     id: number;
+    username?: string;
     email: string;
     name: string;
     role: 'tenant_admin' | 'owner' | 'co-owner' | 'super_admin' | 'admin' | 'accountant' | 'teacher' | 'front_desk' | 'hr_manager' | 'parent' | 'staff';
     phone?: string;
     school_id?: number;
+    school_name?: string;
     preferred_language?: string;
     is_active?: boolean;
     email_verified?: boolean;

@@ -81,6 +81,7 @@ router.post(
 
                 const examSubjectInserts = subjects.map((s: any) => ({
                     exam_id: createdExam.id,
+                    school_id: schoolId,
                     subject_id: s.subject_id,
                     max_marks: s.max_marks || 100,
                     passing_marks: s.passing_marks || 33,
@@ -202,6 +203,7 @@ router.post(
                 const inserts = marksData.map((m: any) => ({
                     student_id: m.student_id,
                     exam_subject_id,
+                    school_id: schoolId,
                     academic_year_id: academicYear?.id || -1,
                     marks_obtained: m.is_absent ? null : m.marks_obtained,
                     is_absent: m.is_absent || false,

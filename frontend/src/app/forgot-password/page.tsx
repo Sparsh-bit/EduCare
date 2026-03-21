@@ -1,11 +1,18 @@
 'use client';
+
 import { useState } from 'react';
 import Link from 'next/link';
-import { API_BASE } from '@/lib/runtimeConfig';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Mail, ArrowLeft, ArrowRight, CheckCircle, AlertCircle, Building2 } from 'lucide-react';
+import { api } from '@/lib/api';
+import { AuthLayout } from '@/components/auth/AuthLayout';
+
+type Step = 'form' | 'sent';
 
 export default function ForgotPasswordPage() {
+    const [step, setStep] = useState<Step>('form');
     const [username, setUsername] = useState('');
-    const [submitted, setSubmitted] = useState(false);
+    const [schoolCode, setSchoolCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -14,99 +21,147 @@ export default function ForgotPasswordPage() {
         setError('');
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/auth/forgot-password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Request failed');
-            setSubmitted(true);
+            await api.forgotPassword(username.trim(), schoolCode.trim() || undefined);
+            setStep('sent');
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Something went wrong');
+            const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+            // Always show success to prevent username enumeration
+            if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no user')) {
+                setStep('sent');
+            } else {
+                setError(msg);
+            }
         } finally {
             setLoading(false);
         }
     };
 
+    const inputCls = 'w-full h-10 bg-white border border-neutral-200 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 outline-none transition-all px-3 focus:border-brand-500 focus:ring-1';
+
     return (
-        <div className="min-h-screen flex bg-[#f8f9fb]">
-            <div className="w-full flex flex-col min-h-screen">
-                <div className="px-8 py-6 flex items-center max-w-lg mx-auto w-full">
-                    <Link href="/" className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-[#6c5ce7] rounded-lg flex items-center justify-center">
-                            <span className="text-[#f8f9fb] font-bold text-sm">C</span>
-                        </div>
-                        <span className="text-[#6c5ce7] font-semibold text-lg tracking-tight">Concilio</span>
-                    </Link>
-                </div>
+        <AuthLayout>
+            <div className="w-full max-w-[400px]">
+                <AnimatePresence mode="wait">
+                    {step === 'form' ? (
+                        <motion.div
+                            key="form"
+                            initial={{ opacity: 0, y: 16 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -12 }}
+                            transition={{ duration: 0.3 }}
+                        >
+                            <Link
+                                href="/login"
+                                className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-700 mb-8 transition-colors group"
+                            >
+                                <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+                                Back to login
+                            </Link>
 
-                <div className="flex-1 flex items-center justify-center px-8 pb-12">
-                    <div className="w-full max-w-sm">
-                        {submitted ? (
-                            <div className="text-center">
-                                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
-                                    ✉️
-                                </div>
-                                <h1 className="text-2xl font-light text-[#6c5ce7] mb-3"
-                                    style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
-                                    Check your inbox
-                                </h1>
-                                <p className="text-sm text-[#6c5ce7]/50 mb-8 leading-relaxed">
-                                    If <strong>{username}</strong> is registered, you will receive a password reset link shortly on your email.
-                                    Check your spam folder if you don&apos;t see it.
+                            <div className="mb-8">
+                                <h1 className="text-2xl font-bold text-neutral-900">Forgot password?</h1>
+                                <p className="text-sm text-neutral-500 mt-1">
+                                    Enter your username or email. We&apos;ll send a reset link to your registered address.
                                 </p>
-                                <Link href="/login"
-                                    className="text-sm text-[#6c5ce7] hover:text-[#6c5ce7]/70 font-medium transition-colors">
-                                    ← Back to Sign In
-                                </Link>
                             </div>
-                        ) : (
-                            <>
-                                <h1 className="text-3xl font-light text-[#6c5ce7] mb-2"
-                                    style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
-                                    Reset your password
-                                </h1>
-                                <p className="text-sm text-[#6c5ce7]/50 mb-8">
-                                    Enter your registered username and we&apos;ll send a reset link to your email.
-                                </p>
 
-                                {error && (
-                                    <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
-                                        {error}
+                            {error && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="mb-5 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2"
+                                >
+                                    <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                                    <p className="text-sm text-red-700">{error}</p>
+                                </motion.div>
+                            )}
+
+                            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                                        School Code
+                                    </label>
+                                    <div className="relative">
+                                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                                        <input
+                                            type="text"
+                                            value={schoolCode}
+                                            onChange={e => setSchoolCode(e.target.value.toUpperCase())}
+                                            placeholder="e.g. NDPS"
+                                            className={`${inputCls} pl-9 font-mono uppercase`}
+                                            autoComplete="organization"
+                                        />
                                     </div>
-                                )}
+                                </div>
 
-                                <form onSubmit={handleSubmit} className="space-y-5">
-                                    <input
-                                        type="text"
-                                        value={username}
-                                        onChange={e => setUsername(e.target.value)}
-                                        placeholder="Enter your username"
-                                        required
-                                        autoComplete="username"
-                                        className="w-full px-4 py-3 rounded-xl text-sm bg-white/80 border border-[#6c5ce7]/12 text-[#6c5ce7] placeholder-[#6c5ce7]/40 focus:border-[#6c5ce7]/40 focus:ring-0 transition-colors"
-                                        style={{ background: 'rgba(255,255,255,0.8)', borderColor: 'rgba(108,92,231,0.12)' }}
-                                    />
-                                    <button
-                                        type="submit"
-                                        disabled={loading}
-                                        className="w-full py-3 rounded-xl text-sm font-medium text-[#f8f9fb] bg-[#6c5ce7] hover:bg-[#5b4bd5] transition-colors disabled:opacity-50 tracking-wide"
-                                    >
-                                        {loading ? 'Sending...' : 'Send Reset Link'}
-                                    </button>
-                                </form>
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                                        Username or Email
+                                    </label>
+                                    <div className="relative">
+                                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                                        <input
+                                            type="text"
+                                            value={username}
+                                            onChange={e => setUsername(e.target.value)}
+                                            placeholder="Enter your username or email"
+                                            required
+                                            autoComplete="username"
+                                            className={`${inputCls} pl-9`}
+                                        />
+                                    </div>
+                                </div>
 
-                                <p className="text-center mt-6">
-                                    <Link href="/login" className="text-xs text-[#6c5ce7]/40 hover:text-[#6c5ce7]/70 transition-colors">
-                                        ← Back to Sign In
-                                    </Link>
-                                </p>
-                            </>
-                        )}
-                    </div>
-                </div>
+                                <button
+                                    type="submit"
+                                    disabled={loading || !username.trim()}
+                                    className="w-full h-11 rounded-xl text-white text-base font-semibold flex items-center justify-center gap-2 transition-opacity disabled:opacity-60 mt-1"
+                                    style={{ backgroundColor: 'var(--color-brand-700)' }}
+                                >
+                                    {loading ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            Sending...
+                                        </>
+                                    ) : (
+                                        <>Send Reset Link <ArrowRight size={16} /></>
+                                    )}
+                                </button>
+                            </form>
+                        </motion.div>
+                    ) : (
+                        <motion.div
+                            key="sent"
+                            initial={{ opacity: 0, scale: 0.97 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.35 }}
+                            className="text-center"
+                        >
+                            <div
+                                className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6"
+                                style={{ backgroundColor: 'var(--color-brand-50)' }}
+                            >
+                                <CheckCircle className="w-8 h-8" style={{ color: 'var(--color-brand-600)' }} />
+                            </div>
+                            <h1 className="text-2xl font-bold text-neutral-900 mb-2">Check your email</h1>
+                            <p className="text-sm text-neutral-500 mb-8 max-w-xs mx-auto leading-relaxed">
+                                If <strong>{username}</strong> is registered, you&apos;ll receive a password reset link within a few minutes.
+                            </p>
+                            <p className="text-xs text-neutral-400 mb-6">
+                                Don&apos;t see it? Check your spam folder. Reset links expire after 1 hour.
+                            </p>
+                            <Link
+                                href="/login"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium transition-colors hover:opacity-80"
+                                style={{ color: 'var(--color-brand-600)' }}
+                            >
+                                <ArrowLeft size={14} />
+                                Back to login
+                            </Link>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
-        </div>
+        </AuthLayout>
     );
 }

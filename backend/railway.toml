@@ -10,7 +10,7 @@ dockerfilePath = "Dockerfile"
 # Dockerfile CMD already runs migrations then starts the server:
 #   sh -c "npm run migrate && node dist/app.js"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 

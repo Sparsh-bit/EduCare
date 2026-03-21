@@ -7,9 +7,9 @@
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
-    "migrate": "knex migrate:latest --knexfile dist/config/knexfile.js",
-    "migrate:rollback": "knex migrate:rollback --knexfile dist/config/knexfile.js",
-    "seed": "knex seed:run --knexfile dist/config/knexfile.js",
+    "migrate": "knex migrate:latest --knexfile knexfile.cjs",
+    "migrate:rollback": "knex migrate:rollback --knexfile knexfile.cjs",
+    "seed": "knex seed:run --knexfile knexfile.cjs",
     "test": "jest --forceExit --detectOpenHandles",
     "security:audit": "npm audit --production",
     "security:check": "ts-node src/scripts/security-check.ts"

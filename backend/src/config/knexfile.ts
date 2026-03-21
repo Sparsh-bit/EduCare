@@ -89,11 +89,11 @@ const knexConfig: { [key: string]: Knex.Config } = {
         acquireConnectionTimeout: config.db.acquireTimeoutMs,
         migrations: {
             directory: '../migrations',
-            extension: 'ts',
+            extension: 'js',
         },
         seeds: {
             directory: '../seeds',
-            extension: 'ts',
+            extension: 'js',
         },
     },
 };

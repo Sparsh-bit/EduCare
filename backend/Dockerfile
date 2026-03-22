@@ -20,5 +20,5 @@ EXPOSE 5000
 
 # Only run migrations on startup; seeding must be done explicitly via:
 #   docker exec ndps_backend npm run seed
-CMD ["sh", "-c", "npm run migrate && node dist/app.js"]
+CMD ["node", "dist/app.js"]
 

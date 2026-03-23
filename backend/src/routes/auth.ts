@@ -350,17 +350,20 @@ router.post(
             });
 
             const isProduction = process.env.NODE_ENV === 'production';
+            // Cross-origin deployments (e.g. Vercel frontend → Railway backend)
+            // require SameSite=None + Secure so the browser sends cookies cross-origin.
+            const sameSite: 'lax' | 'none' = isProduction ? 'none' : 'lax';
             res.cookie('auth_token', token, {
                 httpOnly: true,
                 secure: isProduction,
-                sameSite: 'lax',
+                sameSite,
                 maxAge: 24 * 60 * 60 * 1000, // 1 day
                 path: '/',
             });
             res.cookie('refresh_token', refreshToken, {
                 httpOnly: true,
                 secure: isProduction,
-                sameSite: 'lax',
+                sameSite,
                 maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
                 path: '/api/auth/refresh',
             });
@@ -413,10 +416,11 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
         );
 
         const isProduction = process.env.NODE_ENV === 'production';
+        const sameSite: 'lax' | 'none' = isProduction ? 'none' : 'lax';
         res.cookie('auth_token', token, {
             httpOnly: true,
             secure: isProduction,
-            sameSite: 'lax',
+            sameSite,
             maxAge: 24 * 60 * 60 * 1000,
             path: '/',
         });
@@ -440,9 +444,31 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
             )
             .where({ 'u.id': req.user!.id })
             .first();
+        if (!user) return res.status(404).json({ error: 'User not found' });
         res.json(user);
     } catch (error) {
-        res.status(500).json({ error: 'Internal server error' });
+        // If a column doesn't exist (e.g. preferred_language, email_verified from later migrations),
+        // fall back to core columns that always exist.
+        logger.warn('/me full query failed, using fallback', error);
+        try {
+            const user = await db('users as u')
+                .leftJoin('schools as s', 'u.school_id', 's.id')
+                .select('u.id', 'u.email', 'u.name', 'u.role', 'u.school_id', 'u.created_at', 's.name as school_name')
+                .where({ 'u.id': req.user!.id })
+                .first();
+            if (!user) return res.status(404).json({ error: 'User not found' });
+            res.json({ ...user, preferred_language: 'en', email_verified: false });
+        } catch (fallbackError) {
+            logger.error('/me fallback also failed', fallbackError);
+            // Last resort: return data from JWT cache
+            res.json({
+                id: req.user!.id,
+                email: req.user!.email,
+                name: req.user!.name,
+                role: req.user!.role,
+                school_id: req.user!.school_id,
+            });
+        }
     }
 });
 

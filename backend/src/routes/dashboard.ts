@@ -12,7 +12,17 @@ router.get('/stats', authenticate, authorize('tenant_admin', 'owner', 'co-owner'
         if (!schoolId) return res.status(403).json({ error: 'User is not mapped to a school' });
 
         const academicYear = await db('academic_years').where({ is_current: true, school_id: schoolId }).first();
-        if (!academicYear) return res.status(400).json({ error: 'No active academic year' });
+        if (!academicYear) {
+            // New school with no academic year — return empty stats instead of 400
+            return res.json({
+                academic_year: null,
+                students: { total: 0, by_class: [] },
+                attendance: { today_date: new Date().toISOString().split('T')[0], total_marked: 0, present: 0, absent: 0, percentage: 0 },
+                fees: { total_expected: 0, total_collected: 0, collection_percentage: 0 },
+                staff: { total: 0 },
+                pending_dues_count: 0,
+            });
+        }
 
         // Student counts
         const totalStudents = await db('students')

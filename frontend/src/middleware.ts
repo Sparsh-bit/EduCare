@@ -48,17 +48,12 @@ export function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // Check for auth token in cookies (set by the client after login)
-    const token = request.cookies.get('auth_token')?.value;
-
-    if (isProtected(pathname) || isParentRoute(pathname) || isStaffRoute(pathname)) {
-        if (!token) {
-            const loginUrl = new URL('/login', request.url);
-            loginUrl.searchParams.set('redirect', pathname);
-            return NextResponse.redirect(loginUrl);
-        }
-    }
-
+    // Auth is handled client-side by AuthContext which checks sessionStorage
+    // for the JWT token. The HttpOnly auth_token cookie lives on the backend
+    // domain (Railway) and is NOT available here on the frontend domain (Vercel),
+    // so we cannot check it in middleware. Let all requests through — the
+    // client-side layout guard in (dashboard)/layout.tsx will redirect to /login
+    // if the user is not authenticated.
     return NextResponse.next();
 }
 

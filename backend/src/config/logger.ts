@@ -31,8 +31,19 @@ const logger = winston.createLogger({
     ),
     defaultMeta: { service: 'ndps-erp' },
     transports: [
-        new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-        new winston.transports.File({ filename: 'logs/combined.log' }),
+        new winston.transports.File({
+            filename: 'logs/error.log',
+            level: 'error',
+            maxsize: 10 * 1024 * 1024,  // rotate at 10 MB
+            maxFiles: 5,                 // keep last 5 rotated files
+            tailable: true,
+        }),
+        new winston.transports.File({
+            filename: 'logs/combined.log',
+            maxsize: 20 * 1024 * 1024,  // rotate at 20 MB
+            maxFiles: 7,                 // keep last 7 rotated files
+            tailable: true,
+        }),
     ],
 });
 

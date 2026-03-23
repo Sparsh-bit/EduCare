@@ -7,7 +7,11 @@ const connection = {
     database: config.db.name,
     user: config.db.user,
     password: config.db.password,
-    ssl: config.db.ssl ? { rejectUnauthorized: false } : false,
+    // DB_SSL_REJECT_UNAUTHORIZED defaults to true (verify server cert).
+    // Set to "false" only for self-hosted Postgres with a self-signed cert.
+    ssl: config.db.ssl
+        ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+        : false,
     connectionTimeoutMillis: config.db.connectionTimeoutMs,
 };
 

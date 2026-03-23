@@ -112,7 +112,7 @@ router.post(
             const classExists = await db('classes').where({ id: req.body.class_id, school_id: schoolId }).first();
             if (!classExists) return res.status(400).json({ error: 'Invalid class for your school' });
 
-            const sectionExists = await db('sections').where({ id: req.body.section_id, class_id: req.body.class_id }).first();
+            const sectionExists = await db('sections').where({ id: req.body.section_id, class_id: req.body.class_id, school_id: schoolId }).first();
             if (!sectionExists) return res.status(400).json({ error: 'Invalid section for selected class' });
 
             // Validate subject belongs to this school (subjects link to classes which link to schools)
@@ -187,7 +187,7 @@ router.get('/sections/:classId', authenticate, validate([paramId('classId')]), a
         const classExists = await db('classes').where({ id: req.params.classId, school_id: schoolId }).first();
         if (!classExists) return res.status(404).json({ error: 'Class not found' });
 
-        const sections = await db('sections').where({ class_id: req.params.classId }).orderBy('name');
+        const sections = await db('sections').where({ class_id: req.params.classId, school_id: schoolId }).orderBy('name');
         res.json(sections);
     } catch (error) {
         logger.error('List sections error', error);

@@ -86,16 +86,19 @@ app.use(helmet({
     xssFilter: false,
     contentSecurityPolicy: {
         directives: {
-            defaultSrc:     ["'self'"],
-            scriptSrc:      ["'self'"],
-            styleSrc:       ["'self'", "'unsafe-inline'"],   // inline styles only for email templates
-            imgSrc:         ["'self'", 'data:', 'blob:'],
-            connectSrc:     ["'self'"],
-            fontSrc:        ["'self'"],
-            objectSrc:      ["'none'"],
-            frameAncestors: ["'none'"],
-            baseUri:        ["'self'"],
-            formAction:     ["'self'"],
+            defaultSrc:              ["'self'"],
+            scriptSrc:               ["'self'"],
+            styleSrc:                ["'self'"],              // no unsafe-inline — API returns JSON only
+            imgSrc:                  ["'self'", 'data:'],
+            connectSrc:              ["'self'"],
+            fontSrc:                 ["'none'"],
+            objectSrc:               ["'none'"],
+            mediaSrc:                ["'none'"],
+            workerSrc:               ["'none'"],
+            frameAncestors:          ["'none'"],
+            frameSrc:                ["'none'"],
+            baseUri:                 ["'self'"],
+            formAction:              ["'self'"],
             upgradeInsecureRequests: [],
         },
     },
@@ -104,6 +107,30 @@ app.use(helmet({
 // ─── Gzip Compression ───
 // Compress all JSON/text responses > 1 KB. Reduces bandwidth ~70% for large list payloads.
 app.use(compression({ threshold: 1024 }));
+
+// ─── HTTP Parameter Pollution Guard ───
+// If a query parameter is supplied multiple times (e.g. ?role=admin&role=owner),
+// collapse it to the LAST occurrence only. Prevents middleware confusion attacks.
+app.use((req, _res, next) => {
+    for (const key of Object.keys(req.query)) {
+        if (Array.isArray(req.query[key])) {
+            const arr = req.query[key] as string[];
+            req.query[key] = arr[arr.length - 1];
+        }
+    }
+    next();
+});
+
+// ─── Remove fingerprinting headers ───
+app.disable('x-powered-by');   // redundant when Helmet is present, explicit is clearer
+
+// ─── Responsible Disclosure ───
+app.get('/.well-known/security.txt', (_req, res) => {
+    const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    res.type('text/plain').send(
+        `Contact: mailto:security@concilio.in\nPreferred-Languages: en\nExpires: ${expires}\n`
+    );
+});
 
 // CORS — supports a comma-separated list of allowed origins so both the
 // production domain and Cloudflare Pages preview URLs can be whitelisted.

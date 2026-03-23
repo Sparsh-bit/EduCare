@@ -313,7 +313,7 @@ export default function TaxPage() {
                                         <td className="px-5 py-3 text-right">₹{Number(row.gross).toLocaleString('en-IN')}</td>
                                         <td className="px-5 py-3 text-right text-rose-600">₹{Number(row.pf).toLocaleString('en-IN')}</td>
                                         <td className="px-5 py-3 text-right text-rose-600">₹{Number(row.esi).toLocaleString('en-IN')}</td>
-                                        <td className="px-5 py-3 text-right text-rose-600">₹{Number(row.pt).toLocaleString('en-IN')}</td>
+                                        <td className="px-5 py-3 text-right text-rose-600">₹{Number(row.professional_tax ?? row.pt ?? 0).toLocaleString('en-IN')}</td>
                                         <td className="px-5 py-3 text-right text-rose-600">₹{Number(row.tds).toLocaleString('en-IN')}</td>
                                         <td className="px-5 py-3 text-right text-rose-600">₹{Number(row.total_deductions).toLocaleString('en-IN')}</td>
                                         <td className="px-5 py-3 text-right font-semibold text-emerald-700">₹{Number(row.net).toLocaleString('en-IN')}</td>

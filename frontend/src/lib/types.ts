@@ -298,12 +298,18 @@ export interface SalaryRecord {
     id: number;
     staff_id: number;
     staff_name?: string;
+    designation?: string;
     month: number;
     year: number;
-    basic_salary: number;
-    deductions: number;
+    gross_earned: number;
+    basic_earned?: number;
+    pf_employee?: number;
+    esi_employee?: number;
+    professional_tax?: number;
+    tds?: number;
+    total_deductions: number;
     net_salary: number;
-    status: 'processed' | 'paid';
+    status: 'processed' | 'paid' | 'draft';
     payment_date?: string;
     school_id: number;
 }

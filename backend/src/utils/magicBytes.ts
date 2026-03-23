@@ -36,7 +36,7 @@ const SIGNATURES: Record<string, MagicSignature[]> = {
  */
 export async function validateMagicBytes(filePath: string, declaredMime: string): Promise<boolean> {
     const sigs = SIGNATURES[declaredMime.toLowerCase()];
-    if (!sigs || sigs.length === 0) return true; // no signature known — pass through
+    if (!sigs || sigs.length === 0) return false; // unknown MIME type — reject (fail-closed)
 
     const HEADER_SIZE = 12;
     let header: Buffer;

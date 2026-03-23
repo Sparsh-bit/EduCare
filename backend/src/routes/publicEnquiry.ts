@@ -1,10 +1,25 @@
 import { Router, Request, Response } from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import { body } from 'express-validator';
 import db from '../config/database';
 import { config } from '../config';
 import { validate } from '../middleware/validate';
 import logger from '../config/logger';
+
+/**
+ * Constant-time string comparison — prevents timing oracle attacks where an
+ * attacker measures response latency to determine how many characters of the
+ * key matched before the comparison short-circuited.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+    // Pad both to the same length so timingSafeEqual doesn't throw.
+    // The result is still cryptographically safe — length mismatch → false.
+    const aBuf = Buffer.from(a.padEnd(128, '\0'));
+    const bBuf = Buffer.from(b.padEnd(128, '\0'));
+    if (aBuf.length !== bBuf.length) return false;
+    return crypto.timingSafeEqual(aBuf, bBuf) && a.length === b.length;
+}
 
 const router = Router();
 
@@ -28,8 +43,9 @@ async function resolveSchool(req: Request): Promise<{ schoolId: number } | { err
 
     // ── Method 1: ERP_API_KEY header ──
     if (apiKey) {
-        if (!config.erpApiKey || apiKey !== config.erpApiKey) {
-            return { error: 'Invalid API key', status: 401 };
+        // timingSafeEqual prevents attacker from measuring partial-match response time
+        if (!config.erpApiKey || !timingSafeEqual(apiKey, config.erpApiKey)) {
+            return { error: 'Authentication failed', status: 401 };
         }
         // school_id must be in the body when using the API key method
         const schoolId = parseInt(String(req.body.school_id ?? ''), 10);
@@ -38,7 +54,8 @@ async function resolveSchool(req: Request): Promise<{ schoolId: number } | { err
         }
         const school = await db('schools').where('id', schoolId).select('id').first();
         if (!school) {
-            return { error: 'School not found', status: 404 };
+            // Use same error message as auth failure to avoid leaking school IDs
+            return { error: 'Authentication failed', status: 401 };
         }
         return { schoolId };
     }
@@ -53,7 +70,7 @@ async function resolveSchool(req: Request): Promise<{ schoolId: number } | { err
         .select('id')
         .first();
     if (!school) {
-        return { error: 'Invalid school token', status: 401 };
+        return { error: 'Authentication failed', status: 401 };
     }
     return { schoolId: school.id as number };
 }

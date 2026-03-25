@@ -48,11 +48,26 @@ const logger = winston.createLogger({
 });
 
 if (config.nodeEnv !== 'production') {
+    // Development: colourised human-readable console output
     logger.add(
         new winston.transports.Console({
             format: winston.format.combine(
                 winston.format.colorize(),
                 winston.format.simple()
+            ),
+        })
+    );
+} else if (process.env.LOG_TO_STDOUT === 'true') {
+    // Production on AWS ECS: structured JSON on stdout.
+    // ECS awslogs driver captures stdout → CloudWatch Logs automatically.
+    // Set LOG_TO_STDOUT=true in the ECS task definition environment.
+    logger.add(
+        new winston.transports.Console({
+            format: winston.format.combine(
+                redactFormat(),
+                winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+                winston.format.errors({ stack: true }),
+                winston.format.json(),
             ),
         })
     );

@@ -5,6 +5,8 @@
 **/.env.*
 !.env.example
 !**/.env.example
+!.env.production.example
+!**/.env.production.example
 db.env
 
 # Secrets & credentials

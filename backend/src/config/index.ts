@@ -44,12 +44,13 @@ const validateCriticalConfig = () => {
         throw new Error('DB_PASSWORD is required for non-local database hosts.');
     }
 
-    const needsRazorpay = process.env.ENABLE_ONLINE_PAYMENTS === 'true' || process.env.NODE_ENV === 'production';
-    if (needsRazorpay) {
+    // Razorpay keys are only required when online payments are explicitly enabled.
+    // Defaults to false so AWS ECS deployments without Razorpay start cleanly.
+    if (process.env.ENABLE_ONLINE_PAYMENTS === 'true') {
         const keyId = process.env.RAZORPAY_KEY_ID?.trim();
         const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
         if (!keyId || !keySecret) {
-            throw new Error('RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required when online payments are enabled or in production.');
+            throw new Error('RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required when ENABLE_ONLINE_PAYMENTS=true.');
         }
     }
 };
@@ -67,7 +68,10 @@ export const config = {
         name: process.env.DB_NAME || 'ndps_erp',
         user: process.env.DB_USER || 'postgres',
         password: process.env.DB_PASSWORD || '',
-        ssl: process.env.DB_SSL === 'true' || process.env.DB_HOST?.includes('supabase.com') || false,
+        ssl: process.env.DB_SSL === 'true'
+            || process.env.DB_HOST?.includes('supabase.com')
+            || process.env.DB_HOST?.includes('rds.amazonaws.com')
+            || false,
         poolMin: parseInt(process.env.DB_POOL_MIN || '0'),
         poolMax: parseInt(process.env.DB_POOL_MAX || (process.env.NODE_ENV === 'production' ? '20' : '10')),
         acquireTimeoutMs: parseInt(process.env.DB_ACQUIRE_TIMEOUT_MS || '20000'),
@@ -85,6 +89,19 @@ export const config = {
     razorpay: {
         keyId: process.env.RAZORPAY_KEY_ID || '',
         keySecret: process.env.RAZORPAY_KEY_SECRET || '',
+        enabled: process.env.ENABLE_ONLINE_PAYMENTS === 'true',
+    },
+
+    // AWS S3 for persistent file storage on ECS Fargate.
+    // Set USE_S3=true + S3_BUCKET to enable; otherwise files use local disk (EFS or Railway volume).
+    // On ECS, credentials come from the IAM task role — no explicit keys needed.
+    s3: {
+        enabled: process.env.USE_S3 === 'true',
+        bucket: process.env.S3_BUCKET || '',
+        region: process.env.AWS_REGION || 'ap-south-1',
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+        cdnUrl: process.env.S3_CDN_URL || '',
     },
 
     msg91: {

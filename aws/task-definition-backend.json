@@ -1,0 +1,104 @@
+{
+  "_comment": "EduCare ERP — Backend ECS Task Definition Template",
+  "_instructions": [
+    "Replace ALL <PLACEHOLDER> values before registering.",
+    "Register with: aws ecs register-task-definition --cli-input-json file://task-definition-backend.json",
+    "Secrets are stored in AWS Secrets Manager and injected at container start.",
+    "The task role (taskRoleArn) must have permission to read those secrets."
+  ],
+  "family": "ndps-erp-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ndps-erp-task-role",
+  "containerDefinitions": [
+    {
+      "name": "ndps-erp-backend",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/ndps-erp-backend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 5000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "NODE_ENV",              "value": "production" },
+        { "name": "PORT",                  "value": "5000" },
+        { "name": "TRUST_PROXY",           "value": "1" },
+        { "name": "DB_SSL",                "value": "true" },
+        { "name": "DB_PORT",               "value": "5432" },
+        { "name": "DB_NAME",               "value": "postgres" },
+        { "name": "DB_POOL_MIN",           "value": "2" },
+        { "name": "DB_POOL_MAX",           "value": "20" },
+        { "name": "ENABLE_ONLINE_PAYMENTS","value": "false" },
+        { "name": "LATE_FEE_PER_DAY",      "value": "50" },
+        { "name": "LATE_FEE_MAX",          "value": "2000" },
+        { "name": "LOG_TO_STDOUT",         "value": "true" },
+        { "name": "AWS_REGION",            "value": "<AWS_REGION>" },
+        { "name": "UPLOAD_DIR",            "value": "/mnt/efs/uploads" },
+        { "name": "FRONTEND_URL",          "value": "https://<YOUR_FRONTEND_DOMAIN>" },
+        { "name": "SKIP_MIGRATIONS",       "value": "false" }
+      ],
+      "secrets": [
+        { "name": "DB_HOST",               "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/db-host" },
+        { "name": "DB_USER",               "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/db-user" },
+        { "name": "DB_PASSWORD",           "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/db-password" },
+        { "name": "JWT_SECRET",            "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/jwt-secret" },
+        { "name": "JWT_REFRESH_SECRET",    "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/jwt-refresh-secret" },
+        { "name": "AADHAAR_ENCRYPTION_KEY","valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/aadhaar-key" },
+        { "name": "SUPABASE_URL",          "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/supabase-url" },
+        { "name": "SUPABASE_KEY",          "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/supabase-key" },
+        { "name": "RESEND_API_KEY",        "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/resend-api-key" },
+        { "name": "GEMINI_API_KEY",        "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/gemini-api-key" },
+        { "name": "ERP_API_KEY",           "valueFrom": "arn:aws:secretsmanager:<AWS_REGION>:<AWS_ACCOUNT_ID>:secret:ndps-erp/erp-api-key" }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:5000/api/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/ndps-erp-backend",
+          "awslogs-region": "<AWS_REGION>",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "mountPoints": [
+        {
+          "sourceVolume": "efs-uploads",
+          "containerPath": "/mnt/efs/uploads",
+          "readOnly": false
+        }
+      ],
+      "ulimits": [
+        { "name": "nofile", "softLimit": 65536, "hardLimit": 65536 }
+      ],
+      "readonlyRootFilesystem": false,
+      "linuxParameters": {
+        "initProcessEnabled": true
+      }
+    }
+  ],
+  "volumes": [
+    {
+      "name": "efs-uploads",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "<EFS_FILESYSTEM_ID>",
+        "rootDirectory": "/uploads",
+        "transitEncryption": "ENABLED",
+        "authorizationConfig": {
+          "accessPointId": "<EFS_ACCESS_POINT_ID>",
+          "iam": "ENABLED"
+        }
+      }
+    }
+  ]
+}

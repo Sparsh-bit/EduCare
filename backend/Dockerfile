@@ -17,6 +17,7 @@ COPY --from=builder /app/dist         ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/knexfile.cjs ./knexfile.cjs
+COPY --from=builder /app/migrate.cjs  ./migrate.cjs
 COPY --from=builder /app/src          ./src
 
 # Create upload and log directories; drop to least-privilege user

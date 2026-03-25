@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+RUN npm run build && echo '{"type":"commonjs"}' > dist/package.json
 
 # ─── Stage 2: Production image ────────────────────────────────────────────────
 FROM node:20-alpine

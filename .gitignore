@@ -45,7 +45,7 @@ pgdata/
 
 # Development/local scripts (not for version control)
 mcp_server_script.js
-app/
+/app/
 
 # Temporary files
 tmp-upload.csv

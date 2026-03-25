@@ -70,8 +70,21 @@ export const config = {
         password: process.env.DB_PASSWORD || '',
         ssl: process.env.DB_SSL === 'true'
             || process.env.DB_HOST?.includes('supabase.com')
+            || process.env.DB_HOST?.includes('supabase.co')
             || process.env.DB_HOST?.includes('rds.amazonaws.com')
             || false,
+        // Supabase session/transaction poolers use *.pooler.supabase.com and may not
+        // pass strict cert validation. Default rejectUnauthorized=false for pooler hosts
+        // unless explicitly overridden with DB_SSL_REJECT_UNAUTHORIZED=true.
+        sslRejectUnauthorized: (() => {
+            const override = process.env.DB_SSL_REJECT_UNAUTHORIZED;
+            if (override === 'true') return true;
+            if (override === 'false') return false;
+            // Supabase pooler hosts: allow without cert validation by default
+            const host = process.env.DB_HOST || '';
+            if (host.includes('pooler.supabase.com') || host.includes('supabase.co')) return false;
+            return true; // All other hosts: strict validation
+        })(),
         poolMin: parseInt(process.env.DB_POOL_MIN || '0'),
         poolMax: parseInt(process.env.DB_POOL_MAX || (process.env.NODE_ENV === 'production' ? '20' : '10')),
         acquireTimeoutMs: parseInt(process.env.DB_ACQUIRE_TIMEOUT_MS || '20000'),

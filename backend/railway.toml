@@ -35,7 +35,7 @@ restartPolicyMaxRetries = 3
 # NODE_ENV              production
 # TRUST_PROXY           1
 #
-# ERP_API_KEY           ndps_erp_f02ce2e9eb93ce8d74502cb82ec33b43f7584aad00fece1649f5d03146ebc530
+# ERP_API_KEY           <generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">"
 #
 # RESEND_API_KEY        <resend key>
 # EMAIL_FROM            EduCare by Concilio <EduCare@concilio.solutions>

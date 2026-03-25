@@ -7,10 +7,11 @@ const connection = {
     database: config.db.name,
     user: config.db.user,
     password: config.db.password,
-    // DB_SSL_REJECT_UNAUTHORIZED defaults to true (verify server cert).
-    // Set to "false" only for self-hosted Postgres with a self-signed cert.
+    // SSL: enabled for Supabase/RDS hosts. rejectUnauthorized defaults to false
+    // for Supabase pooler hosts (*.pooler.supabase.com / *.supabase.co) and true
+    // for all other hosts. Override via DB_SSL_REJECT_UNAUTHORIZED=true|false.
     ssl: config.db.ssl
-        ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+        ? { rejectUnauthorized: config.db.sslRejectUnauthorized }
         : false,
     connectionTimeoutMillis: config.db.connectionTimeoutMs,
 };

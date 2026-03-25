@@ -57,70 +57,77 @@ export async function up(knex: Knex): Promise<void> {
     const hasSchoolId = new Set(schoolIdCols.map((t) => t.table_name));
 
     let count = 0;
+    const skipped: string[] = [];
 
     for (const table of tableNames) {
-        // Enable RLS (idempotent)
-        await knex.raw(`ALTER TABLE ?? ENABLE ROW LEVEL SECURITY`, [table]);
+        try {
+            // Enable RLS (idempotent)
+            await knex.raw(`ALTER TABLE ?? ENABLE ROW LEVEL SECURITY`, [table]);
 
-        // Drop any existing tenant_isolation / school_access policy
-        await knex.raw(`DROP POLICY IF EXISTS tenant_isolation ON ??`, [table]);
-        await knex.raw(`DROP POLICY IF EXISTS school_access ON ??`, [table]);
+            // Drop any existing tenant_isolation / school_access policy
+            await knex.raw(`DROP POLICY IF EXISTS tenant_isolation ON ??`, [table]);
+            await knex.raw(`DROP POLICY IF EXISTS school_access ON ??`, [table]);
 
-        if (table === 'schools') {
-            // schools uses `id` not `school_id`
-            await knex.raw(`
-                CREATE POLICY school_access ON schools
-                FOR ALL
-                USING (
-                    id = NULLIF(current_setting('app.current_school_id', true), '')::integer
-                    OR ${BYPASS_CONDITION}
-                )
-                WITH CHECK (
-                    id = NULLIF(current_setting('app.current_school_id', true), '')::integer
-                    OR ${BYPASS_CONDITION}
-                )
-            `);
-        } else if (BACKEND_ONLY_TABLES.has(table)) {
-            // Completely private — no anon/auth access, only backend bypass
-            await knex.raw(`
-                CREATE POLICY tenant_isolation ON ??
-                FOR ALL
-                USING (${BYPASS_CONDITION})
-                WITH CHECK (${BYPASS_CONDITION})
-            `, [table]);
-        } else if (PUBLIC_INSERT_TABLES.has(table)) {
-            // Public insert (website enquiry form) — reads require bypass
-            await knex.raw(`
-                CREATE POLICY tenant_isolation ON ??
-                FOR ALL
-                USING (${BYPASS_CONDITION})
-                WITH CHECK (true)
-            `, [table]);
-        } else if (hasSchoolId.has(table)) {
-            // Standard multi-tenant table
-            await knex.raw(`
-                CREATE POLICY tenant_isolation ON ??
-                FOR ALL
-                USING (
-                    school_id = NULLIF(current_setting('app.current_school_id', true), '')::integer
-                    OR ${BYPASS_CONDITION}
-                )
-                WITH CHECK (
-                    school_id = NULLIF(current_setting('app.current_school_id', true), '')::integer
-                    OR ${BYPASS_CONDITION}
-                )
-            `, [table]);
-        } else {
-            // No school_id, not special — backend only
-            await knex.raw(`
-                CREATE POLICY tenant_isolation ON ??
-                FOR ALL
-                USING (${BYPASS_CONDITION})
-                WITH CHECK (${BYPASS_CONDITION})
-            `, [table]);
+            if (table === 'schools') {
+                // schools uses `id` not `school_id`
+                await knex.raw(`
+                    CREATE POLICY school_access ON schools
+                    FOR ALL
+                    USING (
+                        id = NULLIF(current_setting('app.current_school_id', true), '')::integer
+                        OR ${BYPASS_CONDITION}
+                    )
+                    WITH CHECK (
+                        id = NULLIF(current_setting('app.current_school_id', true), '')::integer
+                        OR ${BYPASS_CONDITION}
+                    )
+                `);
+            } else if (BACKEND_ONLY_TABLES.has(table)) {
+                // Completely private — no anon/auth access, only backend bypass
+                await knex.raw(`
+                    CREATE POLICY tenant_isolation ON ??
+                    FOR ALL
+                    USING (${BYPASS_CONDITION})
+                    WITH CHECK (${BYPASS_CONDITION})
+                `, [table]);
+            } else if (PUBLIC_INSERT_TABLES.has(table)) {
+                // Public insert (website enquiry form) — reads require bypass
+                await knex.raw(`
+                    CREATE POLICY tenant_isolation ON ??
+                    FOR ALL
+                    USING (${BYPASS_CONDITION})
+                    WITH CHECK (true)
+                `, [table]);
+            } else if (hasSchoolId.has(table)) {
+                // Standard multi-tenant table
+                await knex.raw(`
+                    CREATE POLICY tenant_isolation ON ??
+                    FOR ALL
+                    USING (
+                        school_id = NULLIF(current_setting('app.current_school_id', true), '')::integer
+                        OR ${BYPASS_CONDITION}
+                    )
+                    WITH CHECK (
+                        school_id = NULLIF(current_setting('app.current_school_id', true), '')::integer
+                        OR ${BYPASS_CONDITION}
+                    )
+                `, [table]);
+            } else {
+                // No school_id, not special — backend only
+                await knex.raw(`
+                    CREATE POLICY tenant_isolation ON ??
+                    FOR ALL
+                    USING (${BYPASS_CONDITION})
+                    WITH CHECK (${BYPASS_CONDITION})
+                `, [table]);
+            }
+
+            count++;
+        } catch (err: any) {
+            // Skip tables where the DB user lacks ALTER privilege (views, foreign tables, etc.)
+            // This makes the migration safe on Railway Postgres where some system tables are read-only.
+            skipped.push(`${table}: ${err?.message ?? err}`);
         }
-
-        count++;
     }
 
     // ── 2. Revoke direct access from Supabase public roles ─────────────────
@@ -144,7 +151,7 @@ export async function up(knex: Knex): Promise<void> {
     // policies above are what control access. No additional grants needed.
 
     // eslint-disable-next-line no-console
-    console.log(`[Migration 034] RLS enforced on ${count} tables. anon/authenticated revoked.`);
+    console.log(`[Migration 034] RLS enforced on ${count} tables. anon/authenticated revoked.${skipped.length > 0 ? ` Skipped ${skipped.length} tables (insufficient privilege — safe to ignore on non-Supabase PG).` : ''}`);
 }
 
 export async function down(knex: Knex): Promise<void> {

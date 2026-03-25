@@ -122,6 +122,7 @@ router.get('/', authenticate, requireSchoolId, async (req: AuthRequest, res: Res
             .join('classes', 'exams.class_id', 'classes.id')
             .where('exams.academic_year_id', academicYear?.id || -1)
             .andWhere('exams.school_id', schoolId)
+            .whereNull('exams.deleted_at')
             .select('exams.*', 'classes.name as class_name');
 
         if (class_id) query = query.where('exams.class_id', class_id);
@@ -144,6 +145,7 @@ router.get('/:examId', authenticate, requireSchoolId, validate([paramId('examId'
             .join('classes', 'exams.class_id', 'classes.id')
             .where('exams.id', req.params.examId)
             .andWhere('exams.school_id', schoolId)
+            .whereNull('exams.deleted_at')
             .select('exams.*', 'classes.name as class_name')
             .first();
 
@@ -259,19 +261,32 @@ router.get('/:examId/results/:classId', authenticate, requireSchoolId, validate(
 
         const students = await studentsQuery.select('id', 'name', 'admission_no', 'current_roll_no', 'current_section_id');
 
+        // Batch load ALL marks for ALL students in one query (no N+1)
+        const examSubjectIds = examSubjects.map((es: any) => es.id);
+        const allMarks = examSubjectIds.length > 0 && students.length > 0
+            ? await db('marks')
+                .whereIn('exam_subject_id', examSubjectIds)
+                .whereIn('student_id', students.map((s: any) => s.id))
+                .select('student_id', 'exam_subject_id', 'marks_obtained', 'is_absent')
+            : [];
+
+        // Group marks by student_id
+        const marksByStudent = new Map<number, Map<number, any>>();
+        for (const m of allMarks) {
+            if (!marksByStudent.has(m.student_id)) marksByStudent.set(m.student_id, new Map());
+            marksByStudent.get(m.student_id)!.set(m.exam_subject_id, m);
+        }
+
         const results = [];
         for (const student of students) {
-            const studentMarks = await db('marks')
-                .whereIn('exam_subject_id', examSubjects.map((es: any) => es.id))
-                .where({ student_id: student.id })
-                .select('exam_subject_id', 'marks_obtained', 'is_absent');
+            const studentMarks = marksByStudent.get(student.id) || new Map();
 
             let totalObtained = 0;
             let totalMax = 0;
             let allPassed = true;
 
             const subjectResults = examSubjects.map((es: any) => {
-                const mark = studentMarks.find((m: any) => m.exam_subject_id === es.id);
+                const mark = studentMarks.get(es.id);
                 const obtained = mark?.is_absent ? 0 : parseFloat(mark?.marks_obtained || '0');
                 const passed = obtained >= es.passing_marks;
                 if (!passed && !mark?.is_absent) allPassed = false;

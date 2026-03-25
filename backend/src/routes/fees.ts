@@ -113,6 +113,7 @@ router.get('/structure/:classId', authenticate, validate([paramId('classId')]), 
 
         const installments = await db('fee_installments')
             .where({ fee_structure_id: structure.id })
+            .whereNull('deleted_at')
             .orderBy('installment_no');
 
         res.json({ ...structure, installments });

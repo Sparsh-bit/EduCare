@@ -643,7 +643,7 @@ class ApiClient {
     }
 
     async getLeaveBalances(staffId: number) {
-        return this.request<Array<{ leave_type: string; total_days: number; used_days: number; balance_days: number }>>(`/hr/leave-balances/${staffId}`);
+        return this.request<Array<{ id: number; staff_id: number; leave_type_id: number; leave_type_name: string; code: string; allocated: number; used: number; remaining: number }>>(`/hr/leave-balances/${staffId}`);
     }
 
     async getHrDashboard() {

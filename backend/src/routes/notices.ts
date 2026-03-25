@@ -50,15 +50,25 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
         const schoolId = req.user?.school_id;
         if (!schoolId) return res.status(403).json({ error: 'User is not mapped to a school' });
 
-        const notices = await db('notices')
-            .leftJoin('users', 'notices.created_by', 'users.id')
-            .where('notices.school_id', schoolId)
-            .andWhere('notices.is_active', true)
-            .select('notices.*', 'users.name as created_by_name')
-            .orderBy('notices.created_at', 'desc')
-            .limit(50);
+        const page = Math.max(1, parseInt(req.query.page as string || '1'));
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string || '50')));
+        const offset = (page - 1) * limit;
 
-        res.json(notices);
+        const [notices, [{ count }]] = await Promise.all([
+            db('notices')
+                .leftJoin('users', 'notices.created_by', 'users.id')
+                .where('notices.school_id', schoolId)
+                .andWhere('notices.is_active', true)
+                .select('notices.*', 'users.name as created_by_name')
+                .orderBy('notices.created_at', 'desc')
+                .limit(limit)
+                .offset(offset),
+            db('notices')
+                .where({ school_id: schoolId, is_active: true })
+                .count('id as count'),
+        ]);
+
+        res.json({ notices, pagination: { total: parseInt(String(count)), page, limit } });
     } catch (error) {
         logger.error('List notices error', error);
         res.status(500).json({ error: 'Internal server error' });

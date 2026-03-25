@@ -34,8 +34,6 @@ router.get('/weak-subjects/:studentId', authenticate, authorize('tenant_admin', 
             .where('classes.school_id', schoolId)
             .select('exam_subjects.*', 'subjects.name as subject_name');
 
-        const weakSubjects = [];
-
         // Group by subject
         const subjectMap = new Map<number, any[]>();
         for (const es of examSubjects) {
@@ -43,21 +41,35 @@ router.get('/weak-subjects/:studentId', authenticate, authorize('tenant_admin', 
             subjectMap.get(es.subject_id)!.push(es);
         }
 
+        // Batch load ALL marks for this student across all exam subjects in one query (no N+1)
+        const allExamSubjectIds = examSubjects.map((es: any) => es.id);
+        const allMarks = await db('marks')
+            .join('students', 'marks.student_id', 'students.id')
+            .whereIn('marks.exam_subject_id', allExamSubjectIds)
+            .where({ 'marks.student_id': studentId, 'students.school_id': schoolId })
+            .select('marks.exam_subject_id', 'marks.marks_obtained');
+
+        // Group marks by subject_id via exam_subject lookup
+        const esById = new Map(examSubjects.map((es: any) => [es.id, es]));
+        const marksBySubject = new Map<number, { marksObtained: number; maxMarks: number }[]>();
+        for (const m of allMarks) {
+            const es = esById.get(m.exam_subject_id);
+            if (!es) continue;
+            if (!marksBySubject.has(es.subject_id)) marksBySubject.set(es.subject_id, []);
+            marksBySubject.get(es.subject_id)!.push({
+                marksObtained: parseFloat(m.marks_obtained || '0'),
+                maxMarks: es.max_marks || 100,
+            });
+        }
+
+        const weakSubjects = [];
         for (const [subjectId, subExams] of subjectMap) {
-            const marks = await db('marks')
-                .join('students', 'marks.student_id', 'students.id')
-                .whereIn('exam_subject_id', subExams.map((se: any) => se.id))
-                .where({ 'marks.student_id': studentId, 'students.school_id': schoolId })
-                .select('marks.*');
+            const subjectMarks = marksBySubject.get(subjectId) || [];
+            if (subjectMarks.length === 0) continue;
 
-            if (marks.length === 0) continue;
+            const avgPercentage = subjectMarks.reduce((sum, m) =>
+                sum + calculatePercentage(m.marksObtained, m.maxMarks), 0) / subjectMarks.length;
 
-            const avgPercentage = marks.reduce((sum: number, m: any) => {
-                const es = subExams.find((se: any) => se.id === m.exam_subject_id);
-                return sum + calculatePercentage(parseFloat(m.marks_obtained || '0'), es?.max_marks || 100);
-            }, 0) / marks.length;
-
-            // Rule: if average < 50%, mark as weak
             if (avgPercentage < 50) {
                 weakSubjects.push({
                     subject: subExams[0].subject_name,
@@ -101,24 +113,34 @@ router.get('/attendance-risk/:classId', authenticate, authorize('tenant_admin', 
 
         const students = await studentsQuery.select('id', 'name', 'admission_no', 'current_roll_no', 'father_phone');
 
+        // Batch load attendance for ALL students in one query (no N+1)
+        const studentIds = students.map((s: any) => s.id);
+        const allAttendance = studentIds.length > 0
+            ? await db('attendance')
+                .whereIn('attendance.student_id', studentIds)
+                .where({ 'attendance.academic_year_id': academicYear?.id || -1 })
+                .select('attendance.student_id', 'attendance.status')
+            : [];
+
+        // Group by student_id
+        const attendanceByStudent = new Map<number, string[]>();
+        for (const rec of allAttendance) {
+            if (!attendanceByStudent.has(rec.student_id)) attendanceByStudent.set(rec.student_id, []);
+            attendanceByStudent.get(rec.student_id)!.push(rec.status);
+        }
+
         const riskStudents = [];
-
         for (const student of students) {
-            const records = await db('attendance')
-                .join('students', 'attendance.student_id', 'students.id')
-                .where({ student_id: student.id, academic_year_id: academicYear?.id || -1 })
-                .andWhere('students.school_id', schoolId)
-                .select('attendance.status');
-
-            const total = records.length;
+            const statuses = attendanceByStudent.get(student.id) || [];
+            const total = statuses.length;
             if (total === 0) continue;
 
-            const present = records.filter((r: any) => r.status === 'P').length;
-            const halfDay = records.filter((r: any) => r.status === 'HD').length;
+            const present = statuses.filter((s: string) => s === 'P').length;
+            const halfDay = statuses.filter((s: string) => s === 'HD').length;
             const effectivePresent = present + (halfDay * 0.5);
             const percentage = Math.round((effectivePresent / total) * 10000) / 100;
 
-            if (percentage < 85) { // Alert threshold at 85%, block at 75%
+            if (percentage < 85) {
                 riskStudents.push({
                     ...student,
                     total_days: total,
@@ -179,23 +201,41 @@ router.get('/fee-delay', authenticate, authorize('tenant_admin', 'owner', 'co-ow
                 'classes.name as class_name'
             );
 
-        const alerts = [];
+        // Batch load all active students in affected classes + their existing payments (no N+1)
+        const instIds = overdueInstallments.map((i: any) => i.id);
+        const affectedClassIds = [...new Set(overdueInstallments.map((i: any) => i.class_id))] as number[];
 
+        const [allStudents, existingPayments] = await Promise.all([
+            affectedClassIds.length > 0
+                ? db('students')
+                    .whereIn('current_class_id', affectedClassIds)
+                    .where({ status: 'active', school_id: schoolId })
+                    .whereNull('deleted_at')
+                    .select('id', 'name', 'admission_no', 'father_phone', 'current_class_id')
+                : Promise.resolve([]),
+            instIds.length > 0
+                ? db('fee_payments')
+                    .whereIn('installment_id', instIds)
+                    .select('student_id', 'installment_id')
+                : Promise.resolve([]),
+        ]);
+
+        // Build lookup: Set of "studentId:installmentId" that are already paid
+        const paidSet = new Set(existingPayments.map((p: any) => `${p.student_id}:${p.installment_id}`));
+
+        // Map class_id → installments for fast lookup
+        const instsByClass = new Map<number, any[]>();
         for (const inst of overdueInstallments) {
-            // Get students in this class without payment for this installment
-            const studentsWithoutPayment = await db('students')
-                .leftJoin('fee_payments', function () {
-                    this.on('fee_payments.student_id', '=', 'students.id')
-                        .andOnVal('fee_payments.installment_id', '=', inst.id);
-                })
-                .where({ 'students.current_class_id': inst.class_id, 'students.status': 'active', 'students.school_id': schoolId })
-                .whereNull('students.deleted_at')
-                .whereNull('fee_payments.id')
-                .select('students.id', 'students.name', 'students.admission_no', 'students.father_phone');
+            if (!instsByClass.has(inst.class_id)) instsByClass.set(inst.class_id, []);
+            instsByClass.get(inst.class_id)!.push(inst);
+        }
 
-            for (const student of studentsWithoutPayment) {
+        const alerts = [];
+        for (const student of allStudents) {
+            const classInsts = instsByClass.get(student.current_class_id) || [];
+            for (const inst of classInsts) {
+                if (paidSet.has(`${student.id}:${inst.id}`)) continue;
                 const daysOverdue = Math.floor((today.getTime() - new Date(inst.due_date).getTime()) / (1000 * 60 * 60 * 24));
-
                 alerts.push({
                     student_id: student.id,
                     student_name: student.name,

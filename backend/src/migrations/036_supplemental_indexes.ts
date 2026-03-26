@@ -8,7 +8,10 @@ import { Knex } from 'knex';
  * secondary lookups on reference and history tables.
  *
  * All indexes are CONCURRENTLY — zero downtime, safe on live Supabase.
+ * CONCURRENTLY cannot run inside a transaction, so transaction is disabled.
  */
+export const config = { transaction: false };
+
 export async function up(knex: Knex): Promise<void> {
     // student_class_history — promotions, history views, status filters
     await knex.raw(`

@@ -12,14 +12,22 @@ import showToast from '@/lib/toast';
 type Strategy = 'skip' | 'replace' | 'add_both';
 type Step = 1 | 2 | 3 | 4;
 
+interface DuplicateRow {
+    row: number;
+    new_student: { student_name: string; class: string; section: string; father_name: string; mother_name: string; admission_number: string; phone: string };
+    existing_student: { id: number; name: string; father_name: string; admission_no: string; class_name: string };
+}
+
 interface PreviewResult {
     batch_id: number;
     file_name: string;
     total_rows_detected: number;
     valid_students: number;
+    duplicate_count: number;
     invalid_rows: number;
-    errors: Array<{ row: number; errors: string[] }>;
+    errors: Array<{ row: number; errors: string[]; student_name?: string; class_name?: string; father_name?: string }>;
     preview_records: Array<Record<string, unknown>>;
+    duplicate_rows: DuplicateRow[];
 }
 
 interface ConfirmResult {
@@ -74,8 +82,9 @@ export default function BulkUploadPage() {
     const [confirming, setConfirming] = useState(false);
     const [preview, setPreview] = useState<PreviewResult | null>(null);
     const [result, setResult] = useState<ConfirmResult | null>(null);
-    const [errorFilter, setErrorFilter] = useState<'all' | 'new' | 'errors'>('all');
+    const [errorFilter, setErrorFilter] = useState<'all' | 'new' | 'duplicates' | 'errors'>('all');
     const [reverting, setReverting] = useState(false);
+    const [duplicateDecisions, setDuplicateDecisions] = useState<Record<number, Strategy>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFile = useCallback((f: File) => {
@@ -112,7 +121,11 @@ export default function BulkUploadPage() {
         setConfirming(true);
         setStep(3);
         try {
-            const res = await api.confirmStudentImportBatch(preview.batch_id, strategy);
+            const res = await api.confirmStudentImportBatch(
+                preview.batch_id,
+                strategy,
+                Object.keys(duplicateDecisions).length > 0 ? duplicateDecisions as Record<number, 'skip' | 'replace' | 'add_both'> : undefined,
+            );
             setResult(res);
             setStep(4);
         } catch (err: unknown) {
@@ -140,14 +153,14 @@ export default function BulkUploadPage() {
     };
 
     const reset = () => {
-        setStep(1); setFile(null); setPreview(null); setResult(null); setStrategy('skip');
+        setStep(1); setFile(null); setPreview(null); setResult(null); setStrategy('skip'); setDuplicateDecisions({});
     };
 
     // Template download
     const downloadTemplate = () => {
-        const headers = 'Student_ID,First_Name,Last_Name,Gender,DOB,Class,Section,Roll_No,Blood_Group,Aadhaar_No,Phone,Stud_Email,Father_Name,Mother_Name,Guardian_P,Address,City,State,Pincode,Transport,Bus_Route,Hostel,Category';
-        const sample1 = 'ADM001,Raj,Kumar,Male,2010-05-15,5,A,12,B+,123456789012,9876543210,raj@example.com,Suresh Kumar,Priya Kumar,,123 Main St,Delhi,Delhi,110001,Yes,Route-1,No,General';
-        const sample2 = 'ADM002,Priya,Sharma,Female,2011-03-22,4,B,8,O+,987654321098,9876500001,,Ramesh Sharma,Sunita Sharma,9876500002,456 Park Ave,Mumbai,Maharashtra,400001,No,,No,OBC';
+        const headers = 'Student_ID,First_Name,Last_Name,Gender,DOB,Class,Section,Roll_No,Blood_Group,Aadhaar_No,Phone,Stud_Email,Father_Name,Father_Occupation,Mother_Name,Mother_Phone,Mother_Occupation,Guardian_Name,Guardian_Relation,Guardian_P,Address,City,State,Pincode,Nationality,Admission_Date,Transport,Bus_Route,Hostel,Category,Religion';
+        const sample1 = 'ADM001,Raj,Kumar,Male,2010-05-15,5,A,12,B+,123456789012,9876543210,raj@example.com,Suresh Kumar,Engineer,Priya Kumar,9876543211,Teacher,,,9876500001,123 Main St,Delhi,Delhi,110001,Indian,2023-04-01,Yes,Route-1,No,General,Hindu';
+        const sample2 = 'ADM002,Priya,Sharma,Female,2011-03-22,4,B,8,O+,987654321098,9876500001,,Ramesh Sharma,Business,Sunita Sharma,9876500002,Homemaker,,,9876500003,456 Park Ave,Mumbai,Maharashtra,400001,Indian,2023-04-01,No,,No,OBC,Hindu';
         const csv = [headers, sample1, sample2].join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
@@ -193,6 +206,9 @@ export default function BulkUploadPage() {
                         <motion.div key="step2" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
                             <Step2 preview={preview} strategy={strategy} errorFilter={errorFilter}
                                 setErrorFilter={setErrorFilter}
+                                duplicateDecisions={duplicateDecisions}
+                                setDuplicateDecisions={setDuplicateDecisions}
+                                defaultStrategy={strategy}
                                 onBack={() => setStep(1)}
                                 onConfirm={handleConfirm}
                             />
@@ -318,11 +334,15 @@ function Step1({ file, dragging, uploading, strategy, fileInputRef, onDrop, onDr
 }
 
 // ─── Step 2: Preview ─────────────────────────────────────────
-function Step2({ preview, strategy, errorFilter, setErrorFilter, onBack, onConfirm }: {
-    preview: PreviewResult; strategy: Strategy; errorFilter: 'all' | 'new' | 'errors';
-    setErrorFilter: (f: 'all' | 'new' | 'errors') => void;
+function Step2({ preview, strategy, errorFilter, setErrorFilter, duplicateDecisions, setDuplicateDecisions, defaultStrategy, onBack, onConfirm }: {
+    preview: PreviewResult; strategy: Strategy; errorFilter: 'all' | 'new' | 'duplicates' | 'errors';
+    setErrorFilter: (f: 'all' | 'new' | 'duplicates' | 'errors') => void;
+    duplicateDecisions: Record<number, Strategy>;
+    setDuplicateDecisions: React.Dispatch<React.SetStateAction<Record<number, Strategy>>>;
+    defaultStrategy: Strategy;
     onBack: () => void; onConfirm: () => void;
 }) {
+    void strategy;
     // NOTE: preview_records only contains VALID rows (backend filters before sending).
     // The errors array contains invalid row details separately.
     // We show valid rows in the table and errors as a list view.
@@ -334,6 +354,12 @@ function Step2({ preview, strategy, errorFilter, setErrorFilter, onBack, onConfi
             .slice(0, 6)
         : [];
 
+    const strategyLabels: Record<Strategy, string> = {
+        skip: 'Skip',
+        replace: 'Replace',
+        add_both: 'Add Both',
+    };
+
     return (
         <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
             {/* Summary bar */}
@@ -342,6 +368,11 @@ function Step2({ preview, strategy, errorFilter, setErrorFilter, onBack, onConfi
                 <span className="text-emerald-600 flex items-center gap-1">
                     <Check size={14} /> {preview.valid_students} ready to import
                 </span>
+                {preview.duplicate_count > 0 && (
+                    <span className="text-amber-600 flex items-center gap-1">
+                        <AlertCircle size={14} /> {preview.duplicate_count} duplicates
+                    </span>
+                )}
                 {preview.invalid_rows > 0 && (
                     <span className="text-red-600 flex items-center gap-1">
                         <AlertCircle size={14} /> {preview.invalid_rows} rows have errors
@@ -351,7 +382,7 @@ function Step2({ preview, strategy, errorFilter, setErrorFilter, onBack, onConfi
 
             {/* Filter tabs */}
             <div className="border-b border-neutral-100 px-4 flex gap-1">
-                {(['all', 'new', 'errors'] as const).map(f => (
+                {(['all', 'new', 'duplicates', 'errors'] as const).map(f => (
                     <button
                         key={f}
                         onClick={() => setErrorFilter(f)}
@@ -362,13 +393,64 @@ function Step2({ preview, strategy, errorFilter, setErrorFilter, onBack, onConfi
                     >
                         {f === 'all' ? `All (${preview.total_rows_detected})`
                             : f === 'new' ? `Valid (${preview.valid_students})`
+                            : f === 'duplicates' ? `Duplicates (${preview.duplicate_count})`
                             : `Errors (${preview.invalid_rows})`}
                     </button>
                 ))}
             </div>
 
-            {/* Errors tab: dedicated error list from preview.errors */}
-            {errorFilter === 'errors' ? (
+            {/* Duplicates tab */}
+            {errorFilter === 'duplicates' ? (
+                <div className="p-4 space-y-3 max-h-[520px] overflow-y-auto">
+                    {preview.duplicate_rows.length === 0 ? (
+                        <p className="text-sm text-neutral-400 text-center py-8">No duplicates found</p>
+                    ) : (
+                        preview.duplicate_rows.map((dup) => {
+                            const current = duplicateDecisions[dup.row] || defaultStrategy;
+                            return (
+                                <div key={dup.row} className="border border-amber-200 rounded-xl bg-amber-50/40 p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-xs font-semibold text-amber-700">Row {dup.row} — Duplicate detected</span>
+                                        <div className="flex gap-1">
+                                            {(['skip', 'replace', 'add_both'] as Strategy[]).map((dec) => (
+                                                <button
+                                                    key={dec}
+                                                    onClick={() => setDuplicateDecisions(prev => ({ ...prev, [dup.row]: dec }))}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                                                        current === dec
+                                                            ? 'bg-brand-600 text-white border-brand-600'
+                                                            : 'bg-white text-neutral-600 border-neutral-300 hover:border-brand-400'
+                                                    }`}
+                                                    style={current === dec ? { backgroundColor: 'var(--color-brand-600)', borderColor: 'var(--color-brand-600)' } : {}}
+                                                >
+                                                    {strategyLabels[dec]}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-white rounded-lg border border-neutral-200 p-3">
+                                            <p className="text-xs font-semibold text-neutral-500 mb-2 uppercase tracking-wide">From File</p>
+                                            <p className="text-sm font-medium text-neutral-800">{dup.new_student.student_name}</p>
+                                            <p className="text-xs text-neutral-500">{dup.new_student.class}{dup.new_student.section ? ` – ${dup.new_student.section}` : ''}</p>
+                                            <p className="text-xs text-neutral-500">Father: {dup.new_student.father_name || '—'}</p>
+                                            <p className="text-xs text-neutral-500">Adm: {dup.new_student.admission_number || '—'}</p>
+                                        </div>
+                                        <div className="bg-red-50 rounded-lg border border-red-100 p-3">
+                                            <p className="text-xs font-semibold text-red-500 mb-2 uppercase tracking-wide">In ERP</p>
+                                            <p className="text-sm font-medium text-neutral-800">{dup.existing_student.name}</p>
+                                            <p className="text-xs text-neutral-500">{dup.existing_student.class_name}</p>
+                                            <p className="text-xs text-neutral-500">Father: {dup.existing_student.father_name || '—'}</p>
+                                            <p className="text-xs text-neutral-500">Adm: {dup.existing_student.admission_no || '—'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            ) : errorFilter === 'errors' ? (
+                /* Errors tab: dedicated error list from preview.errors */
                 <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
                     {preview.errors.length === 0 ? (
                         <p className="text-sm text-neutral-400 text-center py-8">No errors found</p>
@@ -378,6 +460,13 @@ function Step2({ preview, strategy, errorFilter, setErrorFilter, onBack, onConfi
                                 <AlertCircle size={14} className="text-red-500 mt-0.5 shrink-0" />
                                 <div>
                                     <span className="text-xs font-semibold text-red-700">Row {e.row}</span>
+                                    {(e.student_name || e.class_name) && (
+                                        <p className="text-xs text-red-600 mt-0.5">
+                                            {e.student_name && <span className="font-medium">{e.student_name}</span>}
+                                            {e.class_name && <span> — {e.class_name}</span>}
+                                            {e.father_name && <span> (Father: {e.father_name})</span>}
+                                        </p>
+                                    )}
                                     <ul className="mt-0.5 space-y-0.5">
                                         {e.errors.map((msg, j) => (
                                             <li key={j} className="text-xs text-red-600">{msg}</li>
@@ -392,7 +481,7 @@ function Step2({ preview, strategy, errorFilter, setErrorFilter, onBack, onConfi
                     )}
                 </div>
             ) : (
-                /* Valid rows table */
+                /* Valid rows table (all / new tabs) */
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead>

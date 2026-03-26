@@ -469,6 +469,13 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
 
             const father_name = cleanText(row.father_name || row.guardian || row.guardian_name);
             const mother_name = cleanText(row.mother_name);
+            const mother_phone = normalizePhone(row.mother_phone || row.mother_mobile);
+            const father_occupation = cleanText(row.father_occupation || row.father_profession);
+            const mother_occupation = cleanText(row.mother_occupation || row.mother_profession);
+            const guardian_name = cleanText(row.guardian_name || row.guardian);
+            const guardian_relation = cleanText(row.guardian_relation || row.relation);
+            const admission_date = row.admission_date || row.doa || row.joining_date || null;
+            const nationality = cleanText(row.nationality) || 'Indian';
             const admission_number = cleanText(row.admission_number || row.admission_no || row.adm_no || row.admno);
             const roll_number = cleanText(row.roll_number || row.roll_no);
             const date_of_birth = parseDateToIso(row.dob || row.date_of_birth);
@@ -536,6 +543,13 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
                     section_id: sectionRec?.id || null,
                     father_name,
                     mother_name,
+                    mother_phone,
+                    father_occupation,
+                    mother_occupation,
+                    guardian_name,
+                    guardian_relation,
+                    admission_date,
+                    nationality,
                     phone,
                     guardian_phone,
                     previous_school,
@@ -563,6 +577,8 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
             });
         }
 
+        const existingStudentByRow = new Map<number, any>();
+
         const admissionNumbers = normalizedRows
             .map((r) => r.normalized.admission_number)
             .filter((v) => !!v);
@@ -571,11 +587,22 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
                 .where({ school_id: schoolId })
                 .whereNull('deleted_at')
                 .whereIn('admission_no', admissionNumbers)
-                .select('admission_no');
-            const existingAdmissions = new Set(existingByAdmission.map((s: any) => String(s.admission_no).toLowerCase()));
+                .select('id', 'name', 'father_name', 'admission_no', 'current_class_id');
+            const existingByAdmMap = new Map<string, any>(existingByAdmission.map((s: any): [string, any] => [String(s.admission_no).toLowerCase(), s]));
             normalizedRows.forEach((r) => {
                 const adm = String(r.normalized.admission_number || '').toLowerCase();
-                if (adm && existingAdmissions.has(adm)) r.errors.push('Duplicate admission number in ERP');
+                if (adm && existingByAdmMap.has(adm)) {
+                    const existing = existingByAdmMap.get(adm);
+                    const classRec = classes.find((c: any) => c.id === existing.current_class_id);
+                    r.warnings.push('Duplicate admission number in ERP');
+                    existingStudentByRow.set(r.row, {
+                        id: existing.id,
+                        name: existing.name,
+                        father_name: existing.father_name,
+                        admission_no: existing.admission_no,
+                        class_name: classRec?.name || String(existing.current_class_id),
+                    });
+                }
             });
         }
 
@@ -585,11 +612,27 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
                 .where({ school_id: schoolId })
                 .whereNull('deleted_at')
                 .whereIn('current_class_id', classIds as number[])
-                .select('name', 'father_name', 'current_class_id');
-            const existingKeySet = new Set(existingStudents.map((s: any) => buildDuplicateKey(s.name, s.father_name, s.current_class_id)).filter(Boolean));
+                .select('id', 'name', 'father_name', 'admission_no', 'current_class_id');
+            const existingByDupKey = new Map<string, any>(
+                existingStudents
+                    .map((s: any): [string, any] => [buildDuplicateKey(s.name, s.father_name, s.current_class_id) as string, s])
+                    .filter(([k]: [string, any]) => !!k)
+            );
             normalizedRows.forEach((r) => {
+                if (existingStudentByRow.has(r.row)) return; // already flagged by admission_no
                 const key = buildDuplicateKey(r.normalized.student_name, r.normalized.father_name, r.normalized.class_id);
-                if (key && existingKeySet.has(key)) r.errors.push('Duplicate student record already exists in ERP');
+                if (key && existingByDupKey.has(key)) {
+                    const existing = existingByDupKey.get(key) as any;
+                    const classRec = classes.find((c: any) => c.id === existing.current_class_id);
+                    r.warnings.push('Duplicate student record already exists in ERP');
+                    existingStudentByRow.set(r.row, {
+                        id: existing.id,
+                        name: existing.name,
+                        father_name: existing.father_name,
+                        admission_no: existing.admission_no,
+                        class_name: classRec?.name || String(existing.current_class_id),
+                    });
+                }
             });
         }
 
@@ -617,7 +660,12 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
                 normalized: r.normalized,
                 errors: r.errors,
                 warnings: r.warnings,
-                flags: { new_class_required: r.new_class_required, new_section_required: r.new_section_required },
+                flags: {
+                    new_class_required: r.new_class_required,
+                    new_section_required: r.new_section_required,
+                    is_duplicate: existingStudentByRow.has(r.row),
+                    existing_student: existingStudentByRow.get(r.row) || null,
+                },
             },
         }));
 
@@ -647,13 +695,35 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
             file_name: req.file.originalname,
             total_rows_detected: rawRows.length,
             valid_students: validRows.length,
+            duplicate_count: existingStudentByRow.size,
             invalid_rows: invalidRows.length,
             headers_detected: headers,
             class_distribution: classDistribution,
             class_wise_summary: classWiseSummary,
             mapping: mappingPayload,
-            errors: invalidRows.map((r) => ({ row: r.row, errors: r.errors })),
+            errors: invalidRows.map((r) => ({
+                row: r.row,
+                errors: r.errors,
+                student_name: r.normalized.student_name,
+                class_name: r.normalized.class,
+                father_name: r.normalized.father_name,
+            })),
             preview_records: validRows.slice(0, 20).map((r) => r.normalized),
+            duplicate_rows: normalizedRows
+                .filter((r) => existingStudentByRow.has(r.row) && r.errors.length === 0)
+                .map((r) => ({
+                    row: r.row,
+                    new_student: {
+                        student_name: r.normalized.student_name,
+                        class: r.normalized.class,
+                        section: r.normalized.section,
+                        father_name: r.normalized.father_name,
+                        mother_name: r.normalized.mother_name,
+                        admission_number: r.normalized.admission_number,
+                        phone: r.normalized.phone,
+                    },
+                    existing_student: existingStudentByRow.get(r.row),
+                })),
         });
 
     } catch (error) {
@@ -727,6 +797,13 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
 
             const father_name = cleanText(row.father_name || row.guardian || row.guardian_name);
             const mother_name = cleanText(row.mother_name);
+            const mother_phone = normalizePhone(row.mother_phone || row.mother_mobile);
+            const father_occupation = cleanText(row.father_occupation || row.father_profession);
+            const mother_occupation = cleanText(row.mother_occupation || row.mother_profession);
+            const guardian_name = cleanText(row.guardian_name || row.guardian);
+            const guardian_relation = cleanText(row.guardian_relation || row.relation);
+            const admission_date = row.admission_date || row.doa || row.joining_date || null;
+            const nationality = cleanText(row.nationality) || 'Indian';
             const admission_number = cleanText(row.admission_number || row.admission_no || row.adm_no || row.admno);
             const roll_number = cleanText(row.roll_number || row.roll_no);
             const date_of_birth = parseDateToIso(row.dob || row.date_of_birth);
@@ -795,6 +872,13 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
                     section_id: sectionRec?.id || null,
                     father_name,
                     mother_name,
+                    mother_phone,
+                    father_occupation,
+                    mother_occupation,
+                    guardian_name,
+                    guardian_relation,
+                    admission_date,
+                    nationality,
                     phone,
                     guardian_phone,
                     previous_school,
@@ -822,17 +906,30 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
             });
         }
 
+        const existingStudentByRow = new Map<number, any>();
+
         const admissionNumbers = normalizedRows.map((r) => r.normalized.admission_number).filter((v) => !!v);
         if (admissionNumbers.length) {
             const existingByAdmission = await db('students')
                 .where({ school_id: schoolId })
                 .whereNull('deleted_at')
                 .whereIn('admission_no', admissionNumbers)
-                .select('admission_no');
-            const existingAdmissions = new Set(existingByAdmission.map((s: any) => String(s.admission_no).toLowerCase()));
+                .select('id', 'name', 'father_name', 'admission_no', 'current_class_id');
+            const existingByAdmMap = new Map<string, any>(existingByAdmission.map((s: any): [string, any] => [String(s.admission_no).toLowerCase(), s]));
             normalizedRows.forEach((r) => {
                 const adm = String(r.normalized.admission_number || '').toLowerCase();
-                if (adm && existingAdmissions.has(adm)) r.errors.push('Duplicate admission number in ERP');
+                if (adm && existingByAdmMap.has(adm)) {
+                    const existing = existingByAdmMap.get(adm);
+                    const classRec = classes.find((c: any) => c.id === existing.current_class_id);
+                    r.warnings.push('Duplicate admission number in ERP');
+                    existingStudentByRow.set(r.row, {
+                        id: existing.id,
+                        name: existing.name,
+                        father_name: existing.father_name,
+                        admission_no: existing.admission_no,
+                        class_name: classRec?.name || String(existing.current_class_id),
+                    });
+                }
             });
         }
 
@@ -842,11 +939,27 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
                 .where({ school_id: schoolId })
                 .whereNull('deleted_at')
                 .whereIn('current_class_id', classIds as number[])
-                .select('name', 'father_name', 'current_class_id');
-            const existingKeySet = new Set(existingStudents.map((s: any) => buildDuplicateKey(s.name, s.father_name, s.current_class_id)).filter(Boolean));
+                .select('id', 'name', 'father_name', 'admission_no', 'current_class_id');
+            const existingByDupKey = new Map<string, any>(
+                existingStudents
+                    .map((s: any): [string, any] => [buildDuplicateKey(s.name, s.father_name, s.current_class_id) as string, s])
+                    .filter(([k]: [string, any]) => !!k)
+            );
             normalizedRows.forEach((r) => {
+                if (existingStudentByRow.has(r.row)) return;
                 const key = buildDuplicateKey(r.normalized.student_name, r.normalized.father_name, r.normalized.class_id);
-                if (key && existingKeySet.has(key)) r.errors.push('Duplicate student record already exists in ERP');
+                if (key && existingByDupKey.has(key)) {
+                    const existing = existingByDupKey.get(key) as any;
+                    const classRec = classes.find((c: any) => c.id === existing.current_class_id);
+                    r.warnings.push('Duplicate student record already exists in ERP');
+                    existingStudentByRow.set(r.row, {
+                        id: existing.id,
+                        name: existing.name,
+                        father_name: existing.father_name,
+                        admission_no: existing.admission_no,
+                        class_name: classRec?.name || String(existing.current_class_id),
+                    });
+                }
             });
         }
 
@@ -893,13 +1006,35 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
             file_name: batch.original_file_name,
             total_rows_detected: normalizedRows.length,
             valid_students: validRows.length,
+            duplicate_count: existingStudentByRow.size,
             invalid_rows: invalidRows.length,
             headers_detected: headersDetected,
             class_distribution: classDistribution,
             class_wise_summary: classWiseSummary,
             mapping: mappingPayload,
-            errors: invalidRows.map((r) => ({ row: r.row, errors: r.errors })),
+            errors: invalidRows.map((r) => ({
+                row: r.row,
+                errors: r.errors,
+                student_name: r.normalized.student_name,
+                class_name: r.normalized.class,
+                father_name: r.normalized.father_name,
+            })),
             preview_records: validRows.slice(0, 20).map((r) => r.normalized),
+            duplicate_rows: normalizedRows
+                .filter((r) => existingStudentByRow.has(r.row) && r.errors.length === 0)
+                .map((r) => ({
+                    row: r.row,
+                    new_student: {
+                        student_name: r.normalized.student_name,
+                        class: r.normalized.class,
+                        section: r.normalized.section,
+                        father_name: r.normalized.father_name,
+                        mother_name: r.normalized.mother_name,
+                        admission_number: r.normalized.admission_number,
+                        phone: r.normalized.phone,
+                    },
+                    existing_student: existingStudentByRow.get(r.row),
+                })),
         });
     } catch (error) {
         const err = error as Error;
@@ -935,6 +1070,7 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
         if (!['skip', 'replace', 'add_both'].includes(duplicateStrategy)) {
             return res.status(400).json({ error: 'Invalid duplicate_strategy. Use skip, replace or add_both' });
         }
+        const rowStrategies = (req.body.row_strategies || {}) as Record<string, string>;
 
         const batch = await db('student_import_batches').where({ id: batchId, school_id: schoolId }).first();
         if (!batch) return res.status(404).json({ error: 'Import batch not found' });
@@ -1060,13 +1196,15 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
                     duplicateStudent = existingByDupKey.get(`${classRec.id}:${duplicateKey}`) || null;
                 }
 
-                if (duplicateStudent && duplicateStrategy === 'skip') {
+                const rowStrategy = (rowStrategies[String(rowNo)] as 'skip' | 'replace' | 'add_both') || duplicateStrategy as 'skip' | 'replace' | 'add_both';
+
+                if (duplicateStudent && rowStrategy === 'skip') {
                     skipped.push({ row: rowNo, reason: 'Duplicate existing student in ERP', name: studentName });
                     await db('student_import_batch_items').where({ id: item.id }).update({ status: 'skipped', error: 'Skipped due to duplicate existing student', updated_at: new Date() });
                     continue;
                 }
 
-                if (duplicateStudent && duplicateStrategy === 'replace') {
+                if (duplicateStudent && rowStrategy === 'replace') {
                     await db('students').where({ id: duplicateStudent.id, school_id: schoolId }).update({ deleted_at: new Date(), status: 'inactive', updated_at: new Date() });
                     // Remove from in-memory maps so later rows don't re-match the same soft-deleted record
                     if (duplicateStudent.admission_no) existingByAdmNo.delete(String(duplicateStudent.admission_no).toUpperCase());
@@ -1075,7 +1213,7 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
 
                 // In add_both mode, keep both records; if admission no collides, generate a fresh one.
                 let admissionNo = admissionNoCandidate || await generateAdmissionNo(academicYear.year.split('-')[0], admissionPrefix);
-                if (duplicateStudent && duplicateStrategy === 'add_both' && admissionNoCandidate) {
+                if (duplicateStudent && rowStrategy === 'add_both' && admissionNoCandidate) {
                     admissionNo = await generateAdmissionNo(academicYear.year.split('-')[0], admissionPrefix);
                 }
                 const rollNo = await generateRollNo(

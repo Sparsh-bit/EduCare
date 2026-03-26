@@ -228,9 +228,12 @@ export async function mapStudentImportHeaders(
         'dob', 'gender', 'blood_group',
         'father_name', 'mother_name',
         'father_phone', 'father_email',
+        'mother_phone',
+        'father_occupation', 'mother_occupation',
+        'guardian_name', 'guardian_relation',
         'guardian_phone',
         'address', 'city', 'state', 'pincode',
-        'aadhaar', 'category', 'religion',
+        'aadhaar', 'category', 'religion', 'nationality',
         'previous_school', 'previous_class',
         'class_name', 'section_name',
         'admission_date', 'admission_number',
@@ -260,6 +263,8 @@ Field notes:
 - "admission_number" = student admission ID / roll number assigned at admission
 - "roll_no" = class roll number (a small number like 1-60)
 - "father_phone" / "guardian_phone" = parent contact number
+- "mother_phone" = mother's contact number
+- "admission_date" = date of admission to this school
 - "transport" = whether student uses school transport (yes/no/true/false)
 - "hostel" = whether student is a boarder / hostel resident
 - "bus_route" = transport route name/number
@@ -314,6 +319,11 @@ function heuristicHeaderMap(headers: string[], fields: string[]): Record<string,
         mother_name:      ['mothername', 'mother_name', 'mothersname', 'mother'],
         father_phone:     ['fatherphone', 'father_phone', 'father_mobile', 'fathermobile', 'phone', 'mobile', 'contactnumber', 'contact_number', 'parentphone'],
         father_email:     ['fatheremail', 'father_email', 'parentemail', 'parent_email'],
+        mother_phone:     ['motherphone', 'mother_phone', 'mothermobile', 'mother_mobile', 'mommobile', 'momsphone'],
+        father_occupation: ['fatheroccupation', 'father_occupation', 'fatherprofession', 'dadoccupation', 'fatherwork'],
+        mother_occupation: ['motheroccupation', 'mother_occupation', 'motherprofession', 'momoccupation'],
+        guardian_name:    ['guardianname', 'guardian_name', 'guardian', 'localguardian', 'local_guardian'],
+        guardian_relation: ['guardianrelation', 'guardian_relation', 'relation', 'relationship'],
         guardian_phone:   ['guardianphone', 'guardian_phone', 'guardianp', 'guardian_p', 'guardianmobile', 'guardian_mobile', 'emergencyphone'],
         // ── Address ──────────────────────────────────────────────────────
         address:          ['address', 'homeaddress', 'home_address', 'residentialaddress', 'permanent_address'],
@@ -322,6 +332,7 @@ function heuristicHeaderMap(headers: string[], fields: string[]): Record<string,
         pincode:          ['pincode', 'pin', 'zipcode', 'zip', 'postalcode', 'postal_code'],
         // ── Identity ─────────────────────────────────────────────────────
         aadhaar:          ['aadhaar', 'aadhar', 'aadhaarnumber', 'aadhaar_no', 'aadhaarno', 'uid'],
+        nationality:      ['nationality', 'citizen', 'citizenship'],
         // ── Academic ─────────────────────────────────────────────────────
         previous_school:  ['previousschool', 'previous_school', 'lastschool', 'last_school', 'schoolprevious', 'prevschool'],
         previous_class:   ['previousclass', 'previous_class', 'lastclass', 'last_class', 'priorclass', 'prevclass'],

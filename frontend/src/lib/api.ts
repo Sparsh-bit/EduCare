@@ -190,13 +190,19 @@ class ApiClient {
             file_name: string;
             total_rows_detected: number;
             valid_students: number;
+            duplicate_count: number;
             invalid_rows: number;
             headers_detected: string[];
             class_distribution: Record<string, number>;
             class_wise_summary: Array<{ class_name: string; added_count: number }>;
             mapping: Record<string, { field: string; confidence: number }>;
-            errors: Array<{ row: number; errors: string[] }>;
+            errors: Array<{ row: number; errors: string[]; student_name?: string; class_name?: string; father_name?: string }>;
             preview_records: Array<Record<string, unknown>>;
+            duplicate_rows: Array<{
+                row: number;
+                new_student: { student_name: string; class: string; section: string; father_name: string; mother_name: string; admission_number: string; phone: string };
+                existing_student: { id: number; name: string; father_name: string; admission_no: string; class_name: string };
+            }>;
         }>('/students/import/preview', { method: 'POST', body: form });
     }
 
@@ -207,32 +213,39 @@ class ApiClient {
             file_name: string;
             total_rows_detected: number;
             valid_students: number;
+            duplicate_count: number;
             invalid_rows: number;
             headers_detected: string[];
             class_distribution: Record<string, number>;
             class_wise_summary: Array<{ class_name: string; added_count: number }>;
             mapping: Record<string, { field: string; confidence: number }>;
-            errors: Array<{ row: number; errors: string[] }>;
+            errors: Array<{ row: number; errors: string[]; student_name?: string; class_name?: string; father_name?: string }>;
             preview_records: Array<Record<string, unknown>>;
+            duplicate_rows: Array<{
+                row: number;
+                new_student: { student_name: string; class: string; section: string; father_name: string; mother_name: string; admission_number: string; phone: string };
+                existing_student: { id: number; name: string; father_name: string; admission_no: string; class_name: string };
+            }>;
         }>(`/students/import/${batchId}/remap`, {
             method: 'POST',
             body: JSON.stringify({ mapping }),
         });
     }
 
-    async confirmStudentImportBatch(batchId: number, duplicateStrategy: 'skip' | 'replace' | 'add_both' = 'skip') {
+    async confirmStudentImportBatch(batchId: number, duplicateStrategy: 'skip' | 'replace' | 'add_both' = 'skip', rowStrategies?: Record<number, 'skip' | 'replace' | 'add_both'>) {
         return this.request<{
             status: 'completed';
             batch_id: number;
             students_added: number;
             skipped_rows: number;
+            duplicate_count?: number;
             class_distribution: Record<string, number>;
             skipped: Array<{ row: number; reason: string; name?: string }>;
             failed: Array<{ row: number; reason: string; name?: string }>;
             created_preview: Array<{ row: number; id: number; name: string; class_name: string }>;
         }>(`/students/import/${batchId}/confirm`, {
             method: 'POST',
-            body: JSON.stringify({ duplicate_strategy: duplicateStrategy }),
+            body: JSON.stringify({ duplicate_strategy: duplicateStrategy, row_strategies: rowStrategies || {} }),
         });
     }
 

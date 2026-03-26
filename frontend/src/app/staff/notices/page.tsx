@@ -14,7 +14,7 @@ export default function StaffNoticesPage() {
     useEffect(() => {
         api.getNotices()
             .then(data => {
-                const list = Array.isArray(data) ? data : (data as { data?: Notice[] }).data || [];
+                const list = (data as { notices?: Notice[] }).notices || (Array.isArray(data) ? data : []);
                 setNotices(list);
             })
             .catch(() => setNotices([]))

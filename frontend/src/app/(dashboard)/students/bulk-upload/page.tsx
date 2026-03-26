@@ -15,7 +15,7 @@ type Step = 1 | 2 | 3 | 4;
 interface DuplicateRow {
     row: number;
     new_student: { student_name: string; class: string; section: string; father_name: string; mother_name: string; admission_number: string; phone: string };
-    existing_student: { id: number; name: string; father_name: string; admission_no: string; class_name: string };
+    existing_student: { id?: number; source?: 'in_file' | 'erp'; conflict_row?: number; name: string; father_name: string; admission_no: string; class_name: string };
 }
 
 interface PreviewResult {
@@ -80,12 +80,14 @@ export default function BulkUploadPage() {
     const [dragging, setDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [confirming, setConfirming] = useState(false);
+    const [confirmError, setConfirmError] = useState<string | null>(null);
     const [preview, setPreview] = useState<PreviewResult | null>(null);
     const [result, setResult] = useState<ConfirmResult | null>(null);
     const [errorFilter, setErrorFilter] = useState<'all' | 'new' | 'duplicates' | 'errors'>('all');
     const [reverting, setReverting] = useState(false);
     const [duplicateDecisions, setDuplicateDecisions] = useState<Record<number, Strategy>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const confirmingRef = useRef(false);
 
     const handleFile = useCallback((f: File) => {
         if (f.size > 10 * 1024 * 1024) { showToast.error('File must be under 10MB'); return; }
@@ -117,8 +119,10 @@ export default function BulkUploadPage() {
     };
 
     const handleConfirm = async () => {
-        if (!preview) return;
+        if (!preview || confirmingRef.current) return;
+        confirmingRef.current = true;
         setConfirming(true);
+        setConfirmError(null);
         setStep(3);
         try {
             const res = await api.confirmStudentImportBatch(
@@ -130,10 +134,10 @@ export default function BulkUploadPage() {
             setStep(4);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Import failed';
-            showToast.error(msg);
-            setStep(2);
+            setConfirmError(msg);
         } finally {
             setConfirming(false);
+            confirmingRef.current = false;
         }
     };
 
@@ -153,7 +157,7 @@ export default function BulkUploadPage() {
     };
 
     const reset = () => {
-        setStep(1); setFile(null); setPreview(null); setResult(null); setStrategy('skip'); setDuplicateDecisions({});
+        setStep(1); setFile(null); setPreview(null); setResult(null); setStrategy('skip'); setDuplicateDecisions({}); setConfirmError(null);
     };
 
     // Template download
@@ -217,7 +221,10 @@ export default function BulkUploadPage() {
 
                     {step === 3 && (
                         <motion.div key="step3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                            <Step3 preview={preview} confirming={confirming} />
+                            <Step3 preview={preview} confirming={confirming} error={confirmError}
+                                onRetry={handleConfirm}
+                                onBack={() => setStep(2)}
+                            />
                         </motion.div>
                     )}
 
@@ -436,8 +443,10 @@ function Step2({ preview, strategy, errorFilter, setErrorFilter, duplicateDecisi
                                             <p className="text-xs text-neutral-500">Father: {dup.new_student.father_name || '—'}</p>
                                             <p className="text-xs text-neutral-500">Adm: {dup.new_student.admission_number || '—'}</p>
                                         </div>
-                                        <div className="bg-red-50 rounded-lg border border-red-100 p-3">
-                                            <p className="text-xs font-semibold text-red-500 mb-2 uppercase tracking-wide">In ERP</p>
+                                        <div className={`rounded-lg border p-3 ${dup.existing_student.source === 'in_file' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-100'}`}>
+                                            <p className={`text-xs font-semibold mb-2 uppercase tracking-wide ${dup.existing_student.source === 'in_file' ? 'text-amber-600' : 'text-red-500'}`}>
+                                                {dup.existing_student.source === 'in_file' ? `In This File (Row ${dup.existing_student.conflict_row})` : 'In ERP'}
+                                            </p>
                                             <p className="text-sm font-medium text-neutral-800">{dup.existing_student.name}</p>
                                             <p className="text-xs text-neutral-500">{dup.existing_student.class_name}</p>
                                             <p className="text-xs text-neutral-500">Father: {dup.existing_student.father_name || '—'}</p>
@@ -540,7 +549,23 @@ function Step2({ preview, strategy, errorFilter, setErrorFilter, duplicateDecisi
 }
 
 // ─── Step 3: Confirming ──────────────────────────────────────
-function Step3({ preview, confirming }: { preview: PreviewResult | null; confirming: boolean }) {
+function Step3({ preview, confirming, error, onRetry, onBack }: {
+    preview: PreviewResult | null; confirming: boolean;
+    error: string | null; onRetry: () => void; onBack: () => void;
+}) {
+    if (error) {
+        return (
+            <div className="bg-white rounded-2xl border border-neutral-200 p-16 text-center">
+                <AlertCircle size={40} className="mx-auto mb-4 text-red-500" />
+                <p className="text-lg font-semibold text-neutral-800 mb-2">Import Failed</p>
+                <p className="text-sm text-red-600 mb-6 max-w-sm mx-auto">{error}</p>
+                <div className="flex gap-3 justify-center">
+                    <Button variant="outline" onClick={onBack} leftIcon={<ArrowLeft size={14} />}>Back to Preview</Button>
+                    <Button variant="primary" onClick={onRetry}>Try Again</Button>
+                </div>
+            </div>
+        );
+    }
     return (
         <div className="bg-white rounded-2xl border border-neutral-200 p-16 text-center">
             {confirming ? (

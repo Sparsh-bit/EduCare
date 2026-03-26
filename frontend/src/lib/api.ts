@@ -296,7 +296,7 @@ class ApiClient {
     }
 
     async getMonthlyReport(classId: number, sectionId: number, month: string) {
-        return this.request<{ data: AttendanceRecord[] }>(`/attendance/monthly-report/${classId}/${sectionId}/${month}`);
+        return this.request<{ month: string; class_id: number; section_id: number; report: Array<Record<string, unknown>>; records: AttendanceRecord[] }>(`/attendance/monthly-report/${classId}/${sectionId}/${month}`);
     }
 
     // ─── Fees ───
@@ -486,7 +486,7 @@ class ApiClient {
     }
 
     async getNotices() {
-        return this.request<Notice[]>('/notices');
+        return this.request<{ notices: Notice[]; pagination: { total: number; page: number; limit: number } }>('/notices');
     }
 
     async deleteNotice(id: number) {
@@ -757,8 +757,8 @@ class ApiClient {
     async getReportCardConfig() { return this.request<Record<string, unknown>>('/board/report-card-config'); }
     async saveReportCardConfig(data: Record<string, unknown>) { return this.request<Record<string, unknown>>('/board/report-card-config', { method: 'POST', body: JSON.stringify(data) }); }
     async getCoScholastic(studentId: number, academicYearId: number, term: string) { return this.request<Record<string, unknown>>(`/board/co-scholastic/${studentId}/${academicYearId}/${term}`); }
-    async saveCoScholastic(studentId: number, academicYearId: number, term: string, data: Record<string, unknown>) { return this.request<Record<string, unknown>>(`/board/co-scholastic/${studentId}/${academicYearId}/${term}`, { method: 'POST', body: JSON.stringify(data) }); }
-    async bulkSaveCoScholastic(classId: number, academicYearId: number, term: string, data: Record<string, unknown>) { return this.request<Record<string, unknown>>(`/board/co-scholastic/bulk/${classId}/${academicYearId}/${term}`, { method: 'POST', body: JSON.stringify(data) }); }
+    async saveCoScholastic(studentId: number, academicYearId: number, term: string, data: Record<string, unknown>) { return this.request<Record<string, unknown>>('/board/co-scholastic', { method: 'POST', body: JSON.stringify({ ...data, student_id: studentId, academic_year_id: academicYearId, term }) }); }
+    async bulkSaveCoScholastic(classId: number, academicYearId: number, term: string, data: Record<string, unknown>) { return this.request<Record<string, unknown>>('/board/co-scholastic/bulk', { method: 'POST', body: JSON.stringify({ ...data, class_id: classId, academic_year_id: academicYearId, term }) }); }
     async getBoardReportCard(studentId: number, examId: number) { return this.request<Record<string, unknown>>(`/board/report-card/${studentId}/${examId}`); }
 
     // ═══════════════════════════════════════════

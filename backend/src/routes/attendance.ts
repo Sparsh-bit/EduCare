@@ -264,7 +264,13 @@ router.get(
                 .andWhere('attendance.school_id', schoolId)
                 .andWhere('students.school_id', schoolId)
                 .whereRaw("TO_CHAR(date, 'YYYY-MM') = ?", [month])
-                .select('attendance.student_id as student_id', 'attendance.date as date', 'attendance.status as status');
+                .select(
+                    'attendance.student_id as student_id',
+                    'attendance.date as date',
+                    'attendance.status as status',
+                    'students.name as student_name',
+                    'students.current_roll_no as roll_no',
+                );
 
             const report = students.map((s: any) => {
                 const studentRecords = attendanceRecords.filter((r: any) => r.student_id === s.id);
@@ -282,7 +288,7 @@ router.get(
                 };
             });
 
-            res.json({ month, class_id: parseInt(String(classId)), section_id: parseInt(String(sectionId)), report });
+            res.json({ month, class_id: parseInt(String(classId)), section_id: parseInt(String(sectionId)), report, records: attendanceRecords });
         } catch (error) {
             logger.error('Monthly report error', error);
             res.status(500).json({ error: 'Internal server error' });

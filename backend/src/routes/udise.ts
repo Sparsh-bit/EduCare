@@ -53,12 +53,12 @@ router.get('/export', authenticate, async (req: AuthRequest, res: Response) => {
         // Teacher stats
         const teacherStats = await db('staff')
             .where({ school_id: schoolId, status: 'active' })
-            .select('designation', 'qualification')
+            .select('designation', 'qualification', 'gender')
             .orderBy('name');
 
         const totalTeachers = teacherStats.length;
-        const maleTeachers = 0;
-        const femaleTeachers = 0;
+        const maleTeachers = teacherStats.filter((t: any) => t.gender === 'male').length;
+        const femaleTeachers = teacherStats.filter((t: any) => t.gender === 'female').length;
 
         // Infrastructure
         const infra = await db('udise_infrastructure').where({ school_id: schoolId }).first();

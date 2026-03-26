@@ -53,7 +53,7 @@ function NoticesTab() {
         setLoading(true);
         try {
             const data = await api.getNotices();
-            setNotices((data as any) || []);
+            setNotices((data as any)?.notices || (data as any) || []);
         } catch (err) {
             reportApiError(err);
         } finally {

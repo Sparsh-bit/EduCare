@@ -450,8 +450,9 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
         const sections = await db('sections').whereIn('class_id', classes.map((c: any) => c.id));
 
         const normalizedRows: Array<{ row: number; normalized: any; errors: string[]; warnings: string[]; new_class_required: boolean; new_section_required: boolean }> = [];
-        const admissionSeen = new Set<string>();
-        const rowKeySeen = new Set<string>();
+        const existingStudentByRow = new Map<number, any>();
+        const admissionSeen = new Map<string, { row: number; student_name: string; father_name: string; class_name: string; admission_number: string }>();
+        const rowKeySeen = new Map<string, { row: number; student_name: string; father_name: string; class_name: string; admission_number: string }>();
 
         for (let i = 0; i < rawRows.length; i++) {
             const rowNo = i + 2;
@@ -521,16 +522,28 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
             if (!phone && !guardian_phone) warnings.push('Missing recommended field: phone');
             if (!admission_number) warnings.push('Missing recommended field: admission_number');
 
-            const admissionKey = admission_number.toLowerCase();
+            const admissionKey = admission_number ? admission_number.toLowerCase() : '';
             if (admissionKey) {
-                if (admissionSeen.has(admissionKey)) errors.push('Duplicate admission number in upload');
-                admissionSeen.add(admissionKey);
+                if (admissionSeen.has(admissionKey)) {
+                    const first = admissionSeen.get(admissionKey)!;
+                    warnings.push(`Duplicate admission number — also in Row ${first.row} of this file`);
+                    existingStudentByRow.set(rowNo, { source: 'in_file', conflict_row: first.row, name: first.student_name, father_name: first.father_name, admission_no: first.admission_number, class_name: first.class_name });
+                } else {
+                    admissionSeen.set(admissionKey, { row: rowNo, student_name, father_name, class_name: classVal, admission_number });
+                }
             }
 
             const duplicateKey = buildDuplicateKey(student_name, father_name, classRec?.id || classVal);
             if (duplicateKey) {
-                if (rowKeySeen.has(duplicateKey)) errors.push('Duplicate student record in upload');
-                rowKeySeen.add(duplicateKey);
+                if (rowKeySeen.has(duplicateKey)) {
+                    if (!existingStudentByRow.has(rowNo)) {
+                        const first = rowKeySeen.get(duplicateKey)!;
+                        warnings.push(`Duplicate student record — also in Row ${first.row} of this file`);
+                        existingStudentByRow.set(rowNo, { source: 'in_file', conflict_row: first.row, name: first.student_name, father_name: first.father_name, admission_no: first.admission_number, class_name: first.class_name });
+                    }
+                } else {
+                    rowKeySeen.set(duplicateKey, { row: rowNo, student_name, father_name, class_name: classVal, admission_number });
+                }
             }
 
             normalizedRows.push({
@@ -576,8 +589,6 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
                 new_section_required,
             });
         }
-
-        const existingStudentByRow = new Map<number, any>();
 
         const admissionNumbers = normalizedRows
             .map((r) => r.normalized.admission_number)
@@ -778,8 +789,9 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
         const sections = await db('sections').whereIn('class_id', classes.map((c: any) => c.id));
 
         const normalizedRows: Array<{ row: number; normalized: any; errors: string[]; warnings: string[]; new_class_required: boolean; new_section_required: boolean; source: Record<string, any> }> = [];
-        const admissionSeen = new Set<string>();
-        const rowKeySeen = new Set<string>();
+        const existingStudentByRow = new Map<number, any>();
+        const admissionSeen = new Map<string, { row: number; student_name: string; father_name: string; class_name: string; admission_number: string }>();
+        const rowKeySeen = new Map<string, { row: number; student_name: string; father_name: string; class_name: string; admission_number: string }>();
 
         for (const src of sourceRows) {
             const rowNo = src.row;
@@ -849,16 +861,28 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
             if (!phone && !guardian_phone) warnings.push('Missing recommended field: phone');
             if (!admission_number) warnings.push('Missing recommended field: admission_number');
 
-            const admissionKey = admission_number.toLowerCase();
+            const admissionKey = admission_number ? admission_number.toLowerCase() : '';
             if (admissionKey) {
-                if (admissionSeen.has(admissionKey)) errors.push('Duplicate admission number in upload');
-                admissionSeen.add(admissionKey);
+                if (admissionSeen.has(admissionKey)) {
+                    const first = admissionSeen.get(admissionKey)!;
+                    warnings.push(`Duplicate admission number — also in Row ${first.row} of this file`);
+                    existingStudentByRow.set(rowNo, { source: 'in_file', conflict_row: first.row, name: first.student_name, father_name: first.father_name, admission_no: first.admission_number, class_name: first.class_name });
+                } else {
+                    admissionSeen.set(admissionKey, { row: rowNo, student_name, father_name, class_name: classVal, admission_number });
+                }
             }
 
             const duplicateKey = buildDuplicateKey(student_name, father_name, classRec?.id || classVal);
             if (duplicateKey) {
-                if (rowKeySeen.has(duplicateKey)) errors.push('Duplicate student record in upload');
-                rowKeySeen.add(duplicateKey);
+                if (rowKeySeen.has(duplicateKey)) {
+                    if (!existingStudentByRow.has(rowNo)) {
+                        const first = rowKeySeen.get(duplicateKey)!;
+                        warnings.push(`Duplicate student record — also in Row ${first.row} of this file`);
+                        existingStudentByRow.set(rowNo, { source: 'in_file', conflict_row: first.row, name: first.student_name, father_name: first.father_name, admission_no: first.admission_number, class_name: first.class_name });
+                    }
+                } else {
+                    rowKeySeen.set(duplicateKey, { row: rowNo, student_name, father_name, class_name: classVal, admission_number });
+                }
             }
 
             normalizedRows.push({
@@ -905,8 +929,6 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
                 new_section_required,
             });
         }
-
-        const existingStudentByRow = new Map<number, any>();
 
         const admissionNumbers = normalizedRows.map((r) => r.normalized.admission_number).filter((v) => !!v);
         if (admissionNumbers.length) {
@@ -1074,6 +1096,13 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
 
         const batch = await db('student_import_batches').where({ id: batchId, school_id: schoolId }).first();
         if (!batch) return res.status(404).json({ error: 'Import batch not found' });
+        // Auto-heal: if batch stuck in 'processing' for > 2 min (e.g. server restart mid-import), reset it
+        if (batch.status === 'processing' && (Date.now() - new Date(batch.updated_at).getTime()) > 2 * 60 * 1000) {
+            await db('student_import_batches')
+                .where({ id: batchId, school_id: schoolId, status: 'processing' })
+                .update({ status: 'preview_ready', updated_at: new Date() });
+            batch.status = 'preview_ready';
+        }
         if (batch.status !== 'preview_ready') {
             return res.status(400).json({ error: `Batch is in "${batch.status}" state and cannot be confirmed. Only preview_ready batches can be confirmed.` });
         }
@@ -1333,12 +1362,12 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
             stack: err?.stack,
             name: err?.name,
         });
-        // Mark batch as failed so it's not stuck in 'processing' state indefinitely
+        // Reset batch to preview_ready so the user can retry — do not leave stuck in 'processing'
         try {
             await db('student_import_batches')
                 .where({ id: Number(req.params.batchId), school_id: req.user?.school_id })
                 .where('status', 'processing')
-                .update({ status: 'failed', updated_at: new Date() });
+                .update({ status: 'preview_ready', updated_at: new Date() });
         } catch (_markErr) { /* best-effort — don't mask original error */ }
         res.status(500).json({
             error: 'Failed to confirm import batch',

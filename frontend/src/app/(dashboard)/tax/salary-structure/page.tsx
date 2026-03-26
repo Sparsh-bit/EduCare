@@ -45,7 +45,7 @@ export default function SalaryStructurePage() {
     setForm(DEFAULT_STRUCTURE);
     try {
       const d = await api.getSalaryStructure(member.id) as any;
-      if (d?.data) setForm((prev) => ({ ...prev, ...d.data }));
+      if (d && Object.keys(d).length > 0) setForm((prev) => ({ ...prev, ...d }));
     } catch { /* ignore */ }
   };
 

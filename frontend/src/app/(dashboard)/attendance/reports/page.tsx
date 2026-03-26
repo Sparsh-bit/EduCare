@@ -248,7 +248,7 @@ function ClassMonthlyTab() {
                 parseInt(selectedSection),
                 monthYear
             );
-            setRecords((res as any).data || res || []);
+            setRecords((res as any).records || []);
         } catch (err) {
             reportApiError(err);
         } finally {
@@ -449,7 +449,7 @@ function SummaryTab() {
                 parseInt(selectedSection),
                 month
             );
-            setRecords((res as any).data || res || []);
+            setRecords((res as any).records || []);
         } catch (err) {
             reportApiError(err);
         } finally {

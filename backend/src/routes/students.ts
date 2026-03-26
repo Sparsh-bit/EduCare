@@ -485,10 +485,10 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
             if (!student_name) errors.push('Missing required field: student_name');
             if (!classVal) errors.push('Missing required field: class');
             if (!sectionVal) errors.push('Missing required field: section');
-            if (new_class_required && classVal) errors.push('Class does not exist in ERP (new_class_required=true)');
-            if (new_section_required && sectionVal) errors.push('Section does not exist in ERP (new_class_required=true)');
             if ((row.phone || row.mobile || row.contact || row.father_phone) && !phone) errors.push('Invalid phone number');
 
+            if (new_class_required && classVal) warnings.push(`Class "${classVal}" not found in ERP — will be auto-created on import`);
+            if (new_section_required && sectionVal) warnings.push(`Section "${sectionVal}" not found in ERP — will be auto-created on import`);
             if (!father_name) warnings.push('Missing recommended field: father_name');
             if (!phone) warnings.push('Missing recommended field: phone');
             if (!admission_number) warnings.push('Missing recommended field: admission_number');
@@ -710,10 +710,10 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
             if (!student_name) errors.push('Missing required field: student_name');
             if (!classVal) errors.push('Missing required field: class');
             if (!sectionVal) errors.push('Missing required field: section');
-            if (new_class_required && classVal) errors.push('Class does not exist in ERP (new_class_required=true)');
-            if (new_section_required && sectionVal) errors.push('Section does not exist in ERP (new_class_required=true)');
             if ((row.phone || row.mobile || row.contact || row.father_phone) && !phone) errors.push('Invalid phone number');
 
+            if (new_class_required && classVal) warnings.push(`Class "${classVal}" not found in ERP — will be auto-created on import`);
+            if (new_section_required && sectionVal) warnings.push(`Section "${sectionVal}" not found in ERP — will be auto-created on import`);
             if (!father_name) warnings.push('Missing recommended field: father_name');
             if (!phone) warnings.push('Missing recommended field: phone');
             if (!admission_number) warnings.push('Missing recommended field: admission_number');
@@ -915,9 +915,32 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
             return res.status(400).json({ error: errorMsg });
         }
 
-        const classes = await db('classes').where({ school_id: schoolId }).orderBy('numeric_order');
-        const sections = await db('sections').whereIn('class_id', classes.map((c: any) => c.id));
+        let classes = await db('classes').where({ school_id: schoolId }).orderBy('numeric_order');
+        let sections = await db('sections').whereIn('class_id', classes.map((c: any) => c.id));
         const academicYear = await db('academic_years').where({ is_current: true, school_id: schoolId }).first();
+
+        // Auto-create helper: ensures a class exists, returns the record
+        const ensureClass = async (displayName: string): Promise<any> => {
+            const existing = resolveClass(classes, displayName);
+            if (existing) return existing;
+            const numeric = parseClassNumeric(displayName);
+            const maxOrder = classes.length ? Math.max(...classes.map((c: any) => Number(c.numeric_order) || 0)) : 0;
+            const numericOrder = numeric !== null ? numeric : maxOrder + 1;
+            const safeName = String(displayName).slice(0, 10);
+            const [created] = await db('classes').insert({ name: safeName, numeric_order: numericOrder, school_id: schoolId }).returning('*');
+            classes = [...classes, created];
+            return created;
+        };
+
+        // Auto-create helper: ensures a section exists for a class, returns the record
+        const ensureSection = async (classId: number, displayName: string): Promise<any> => {
+            const existing = resolveSection(sections, classId, displayName);
+            if (existing) return existing;
+            const safeName = String(displayName || 'A').slice(0, 5).toUpperCase();
+            const [created] = await db('sections').insert({ class_id: classId, name: safeName, school_id: schoolId }).returning('*');
+            sections = [...sections, created];
+            return created;
+        };
         if (!academicYear) {
             await db('student_import_batches')
                 .where({ id: batchId, school_id: schoolId })
@@ -939,11 +962,12 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
             try {
                 const studentName = cleanText(r.student_name);
                 const fatherName = cleanText(r.father_name);
-                const classRec = resolveClass(classes, r.class_id || r.class);
-                const sectionRec = classRec ? (resolveSection(sections, classRec.id, r.section_id || r.section) || sections.find((s: any) => s.class_id === classRec.id && s.name === r.section)) : null;
-                if (!studentName || !classRec || !sectionRec) {
-                    throw new Error('Normalized row is missing required mapping (name/class/section)');
-                }
+                if (!studentName) throw new Error('Missing student name');
+                const classRec = resolveClass(classes, r.class_id || r.class) || await ensureClass(r.class || String(r.class_id || ''));
+                if (!classRec) throw new Error('Could not resolve or create class');
+                const sectionRec = resolveSection(sections, classRec.id, r.section_id || r.section)
+                    || sections.find((s: any) => s.class_id === classRec.id && s.name === r.section)
+                    || await ensureSection(classRec.id, r.section || String(r.section_id || 'A'));
 
                 const duplicateKey = buildDuplicateKey(studentName, fatherName, classRec.id);
                 const admissionNoCandidate = cleanText(r.admission_number);

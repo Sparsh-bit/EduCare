@@ -108,8 +108,12 @@ class ApiClient {
 
         if (!res.ok) {
             const error = await res.json().catch(() => ({ error: 'Request failed' }));
-            const detail = error.detail ? ` (${error.detail})` : '';
-            throw new Error((error.error || error.message || 'Request failed') + detail);
+            // Sanitize raw DB/internal details — never expose SQL or stack traces to UI
+            const raw = error.error || error.message || 'Request failed';
+            const sanitized = /duplicate key|violates|syntax error|constraint|deadlock|pg_|knex|ECONNREFUSED/i.test(raw)
+                ? 'Operation failed. Please try again or contact support.'
+                : raw;
+            throw new Error(sanitized);
         }
 
         return res.json();

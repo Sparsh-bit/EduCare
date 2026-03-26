@@ -1,10 +1,10 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, reportApiError } from '@/lib/api';
 import type { Student, StudentFeeStatus } from '@/lib/types';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
-import { Search, Wallet, CreditCard, Receipt, FileText, Info, CheckCircle2, Zap, Clock } from 'lucide-react';
+import { Search, Wallet, CreditCard, Receipt, FileText, Info, CheckCircle2, Zap, Clock, AlertTriangle } from 'lucide-react';
 
 const containerVariants: Variants = {
     hidden: { opacity: 0 },
@@ -23,6 +23,8 @@ export default function FeePaymentPage() {
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
     const [feeStatus, setFeeStatus] = useState<StudentFeeStatus | null>(null);
     const [selectedInstallments, setSelectedInstallments] = useState<number[]>([]);
+    const [showPayConfirm, setShowPayConfirm] = useState(false);
+    const submittingRef = useRef(false);
     const [paymentForm, setPaymentForm] = useState(() => ({
         amount_paid: 0,
         payment_mode: 'cash',
@@ -75,15 +77,16 @@ export default function FeePaymentPage() {
         });
     };
 
-    const handlePay = async () => {
-        if (selectedInstallments.length === 0) {
-            toast.error('Select at least one installment');
-            return;
-        }
-        if (paymentForm.payment_mode === 'online') {
-            toast.error('Online payments must be made through the parent portal');
-            return;
-        }
+    const handlePay = () => {
+        if (selectedInstallments.length === 0) { toast.error('Select at least one installment'); return; }
+        if (paymentForm.payment_mode === 'online') { toast.error('Online payments must be made through the parent portal'); return; }
+        setShowPayConfirm(true);
+    };
+
+    const doPayment = async () => {
+        if (submittingRef.current) return; // prevent double-submit
+        submittingRef.current = true;
+        setShowPayConfirm(false);
         setLoading(true);
         try {
             const perInstallmentAmount = paymentForm.amount_paid / selectedInstallments.length;
@@ -105,26 +108,51 @@ export default function FeePaymentPage() {
             toast.error(err instanceof Error ? err.message : 'Payment failed');
         }
         setLoading(false);
+        submittingRef.current = false;
     };
 
     return (
-        <motion.div 
+        <motion.div
             variants={containerVariants}
             initial="hidden"
             animate="show"
             className="space-y-8 pb-12"
         >
+            {/* Payment Confirmation Modal */}
+            {showPayConfirm && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowPayConfirm(false)}>
+                    <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                            <AlertTriangle size={26} className="text-indigo-500" />
+                        </div>
+                        <h3 className="text-lg font-black text-slate-900 text-center mb-2">Confirm Payment</h3>
+                        <p className="text-sm text-slate-500 text-center mb-1">
+                            Record <span className="font-bold text-slate-800">₹{paymentForm.amount_paid.toLocaleString('en-IN')}</span> payment
+                        </p>
+                        <p className="text-sm text-slate-500 text-center mb-6">
+                            via <span className="font-semibold capitalize">{paymentForm.payment_mode}</span> for <span className="font-semibold">{selectedStudent?.name}</span>?
+                        </p>
+                        <p className="text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2 text-center mb-6">
+                            This cannot be undone. Ensure the amount is correct before confirming.
+                        </p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowPayConfirm(false)} className="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200">Cancel</button>
+                            <button onClick={doPayment} className="flex-1 py-3 rounded-2xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700">Confirm Payment</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div>
                     <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-[0.2em] rounded-lg mb-3">
                         <Wallet size={12} />
-                        Financial Intelligence
+                        Fee Collection
                     </div>
                     <h1 className="text-4xl font-black tracking-tight text-gray-900 leading-none">
-                        Payment Terminal
+                        Collect Fees
                     </h1>
                     <p className="text-base text-gray-500 mt-4 font-medium max-w-xl">
-                        A high-precision environment for institutional financial processing and encrypted receipt management.
+                        Search for a student, select installments, and record cash, cheque, or bank payments.
                     </p>
                 </div>
                 <div className="relative w-full md:w-96 group">

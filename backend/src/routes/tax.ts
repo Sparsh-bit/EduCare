@@ -188,6 +188,7 @@ router.post('/payroll/process', authenticate, authorize('owner', 'co-owner', 'hr
 
         const staffList = await staffQuery;
         const processed: number[] = [];
+        const payrollInserts: any[] = [];
 
         for (const s of staffList) {
             const presentDays = s.present_days ?? working_days;
@@ -229,35 +230,38 @@ router.post('/payroll/process', authenticate, authorize('owner', 'co-owner', 'hr
             const totalDeductions = pfEmployee + esiEmployee + pt + monthlyTDS;
             const netSalary = grossEarned - totalDeductions;
 
-            // Upsert payroll record
+            payrollInserts.push({
+                school_id: schoolId, staff_id: s.staff_id, month, year,
+                working_days, present_days: presentDays, lop_days: lopDays,
+                basic_earned: Math.round(basicEarned * 100) / 100,
+                hra_earned: Math.round(hraEarned * 100) / 100,
+                da_earned: Math.round(daEarned * 100) / 100,
+                ta_earned: Math.round(taEarned * 100) / 100,
+                medical_earned: Math.round(medEarned * 100) / 100,
+                special_earned: Math.round(specEarned * 100) / 100,
+                other_earned: Math.round(otherEarned * 100) / 100,
+                gross_earned: Math.round(grossEarned * 100) / 100,
+                pf_employee: Math.round(pfEmployee * 100) / 100,
+                pf_employer: Math.round(pfEmployer * 100) / 100,
+                esi_employee: Math.round(esiEmployee * 100) / 100,
+                esi_employer: Math.round(esiEmployer * 100) / 100,
+                professional_tax: pt,
+                tds: monthlyTDS,
+                other_deductions: 0,
+                total_deductions: Math.round(totalDeductions * 100) / 100,
+                net_salary: Math.round(netSalary * 100) / 100,
+                status: 'draft',
+                processed_by: req.user!.id,
+            });
+            processed.push(s.staff_id);
+        }
+
+        // Batch upsert all payroll records in a single query (avoids N+1)
+        if (payrollInserts.length > 0) {
             await db('payroll_records')
-                .insert({
-                    school_id: schoolId, staff_id: s.staff_id, month, year,
-                    working_days, present_days: presentDays, lop_days: lopDays,
-                    basic_earned: Math.round(basicEarned * 100) / 100,
-                    hra_earned: Math.round(hraEarned * 100) / 100,
-                    da_earned: Math.round(daEarned * 100) / 100,
-                    ta_earned: Math.round(taEarned * 100) / 100,
-                    medical_earned: Math.round(medEarned * 100) / 100,
-                    special_earned: Math.round(specEarned * 100) / 100,
-                    other_earned: Math.round(otherEarned * 100) / 100,
-                    gross_earned: Math.round(grossEarned * 100) / 100,
-                    pf_employee: Math.round(pfEmployee * 100) / 100,
-                    pf_employer: Math.round(pfEmployer * 100) / 100,
-                    esi_employee: Math.round(esiEmployee * 100) / 100,
-                    esi_employer: Math.round(esiEmployer * 100) / 100,
-                    professional_tax: pt,
-                    tds: monthlyTDS,
-                    other_deductions: 0,
-                    total_deductions: Math.round(totalDeductions * 100) / 100,
-                    net_salary: Math.round(netSalary * 100) / 100,
-                    status: 'draft',
-                    processed_by: req.user!.id,
-                })
+                .insert(payrollInserts)
                 .onConflict(['school_id', 'staff_id', 'month', 'year'])
                 .merge();
-
-            processed.push(s.staff_id);
         }
 
         res.json({ message: `Payroll processed for ${processed.length} employees`, count: processed.length });

@@ -919,6 +919,20 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
         let sections = await db('sections').whereIn('class_id', classes.map((c: any) => c.id));
         const academicYear = await db('academic_years').where({ is_current: true, school_id: schoolId }).first();
 
+        // Pre-load all active students for this school to avoid N+1 duplicate-check queries
+        const allExistingStudents = await db('students')
+            .where({ school_id: schoolId })
+            .whereNull('deleted_at')
+            .select('id', 'name', 'father_name', 'admission_no', 'current_class_id');
+
+        const existingByAdmNo = new Map<string, any>();
+        const existingByDupKey = new Map<string, any>(); // key: `${classId}:${dupKey}`
+        for (const s of allExistingStudents) {
+            if (s.admission_no) existingByAdmNo.set(String(s.admission_no).toUpperCase(), s);
+            const dk = buildDuplicateKey(s.name, s.father_name, s.current_class_id);
+            if (dk) existingByDupKey.set(`${s.current_class_id}:${dk}`, s);
+        }
+
         // Auto-create helper: ensures a class exists, returns the record
         const ensureClass = async (displayName: string): Promise<any> => {
             const existing = resolveClass(classes, displayName);
@@ -974,17 +988,10 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
 
                 let duplicateStudent: any = null;
                 if (admissionNoCandidate) {
-                    duplicateStudent = await db('students')
-                        .where({ school_id: schoolId, admission_no: admissionNoCandidate })
-                        .whereNull('deleted_at')
-                        .first();
+                    duplicateStudent = existingByAdmNo.get(admissionNoCandidate.toUpperCase()) || null;
                 }
                 if (!duplicateStudent && duplicateKey) {
-                    const candidates = await db('students')
-                        .where({ school_id: schoolId, current_class_id: classRec.id })
-                        .whereNull('deleted_at')
-                        .select('id', 'name', 'father_name');
-                    duplicateStudent = candidates.find((s: any) => buildDuplicateKey(s.name, s.father_name, classRec.id) === duplicateKey) || null;
+                    duplicateStudent = existingByDupKey.get(`${classRec.id}:${duplicateKey}`) || null;
                 }
 
                 if (duplicateStudent && duplicateStrategy === 'skip') {
@@ -995,6 +1002,9 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
 
                 if (duplicateStudent && duplicateStrategy === 'replace') {
                     await db('students').where({ id: duplicateStudent.id, school_id: schoolId }).update({ deleted_at: new Date(), status: 'inactive', updated_at: new Date() });
+                    // Remove from in-memory maps so later rows don't re-match the same soft-deleted record
+                    if (duplicateStudent.admission_no) existingByAdmNo.delete(String(duplicateStudent.admission_no).toUpperCase());
+                    if (duplicateKey) existingByDupKey.delete(`${classRec.id}:${duplicateKey}`);
                 }
 
                 // In add_both mode, keep both records; if admission no collides, generate a fresh one.

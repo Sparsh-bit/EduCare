@@ -5,7 +5,7 @@ import { authenticate, AuthRequest, authorize, requireSchoolId } from '../middle
 import { validate } from '../middleware/validate';
 import { paramId } from '../middleware/paramValidation';
 import { createAuditLog, getClientIp } from '../utils/auditLog';
-import { calculatePercentage } from '../utils/helpers';
+import { calculatePercentage, calculateGrade } from '../utils/helpers';
 import logger from '../config/logger';
 
 const router = Router();
@@ -304,16 +304,18 @@ router.get('/:examId/results/:classId', authenticate, requireSchoolId, validate(
                 };
             });
 
+            const percentage = calculatePercentage(totalObtained, totalMax);
             results.push({
                 student_id: student.id,
-                name: student.name,
+                student_name: student.name,
                 admission_no: student.admission_no,
                 roll_no: student.current_roll_no,
                 subjects: subjectResults,
                 total_obtained: totalObtained,
                 total_max: totalMax,
-                percentage: calculatePercentage(totalObtained, totalMax),
-                result: allPassed ? 'PASS' : 'FAIL',
+                percentage,
+                grade: calculateGrade(percentage),
+                status: allPassed ? 'Pass' : 'Fail',
             });
         }
 

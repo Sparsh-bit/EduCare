@@ -476,9 +476,10 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
             const gender = normalizeGender(row.gender);
             const email = cleanText(row.email || row.stud_email || row.father_email);
             const phone = normalizePhone(
-                row.phone || row.mobile || row.contact || row.father_phone ||
-                row.guardian_phone || row.guardian_p
+                row.phone || row.mobile || row.contact || row.father_phone
             );
+            const guardian_phone = normalizePhone(row.guardian_phone || row.guardian_p);
+            const previous_school = cleanText(row.previous_school);
             const blood_group = cleanText(row.blood_group);
             const city = cleanText(row.city);
             const state_val = cleanText(row.state);
@@ -505,12 +506,12 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
             if (!student_name) errors.push('Missing required field: student_name');
             if (!classVal) errors.push('Missing required field: class');
             if (!sectionVal) errors.push('Missing required field: section');
-            if ((row.phone || row.mobile || row.contact || row.father_phone || row.guardian_phone || row.guardian_p) && !phone) errors.push('Invalid phone number');
+            if ((row.phone || row.mobile || row.contact || row.father_phone) && !phone) errors.push('Invalid phone number');
 
             if (new_class_required && classVal) warnings.push(`Class "${classVal}" not found in ERP — will be auto-created on import`);
             if (new_section_required && sectionVal) warnings.push(`Section "${sectionVal}" not found in ERP — will be auto-created on import`);
             if (!father_name) warnings.push('Missing recommended field: father_name');
-            if (!phone) warnings.push('Missing recommended field: phone');
+            if (!phone && !guardian_phone) warnings.push('Missing recommended field: phone');
             if (!admission_number) warnings.push('Missing recommended field: admission_number');
 
             const admissionKey = admission_number.toLowerCase();
@@ -536,6 +537,8 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
                     father_name,
                     mother_name,
                     phone,
+                    guardian_phone,
+                    previous_school,
                     admission_number,
                     roll_number,
                     date_of_birth,
@@ -731,9 +734,10 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
             const gender = normalizeGender(row.gender);
             const email = cleanText(row.email || row.stud_email || row.father_email);
             const phone = normalizePhone(
-                row.phone || row.mobile || row.contact || row.father_phone ||
-                row.guardian_phone || row.guardian_p
+                row.phone || row.mobile || row.contact || row.father_phone
             );
+            const guardian_phone = normalizePhone(row.guardian_phone || row.guardian_p);
+            const previous_school = cleanText(row.previous_school);
             const blood_group = cleanText(row.blood_group);
             const city = cleanText(row.city);
             const state_val = cleanText(row.state);
@@ -760,12 +764,12 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
             if (!student_name) errors.push('Missing required field: student_name');
             if (!classVal) errors.push('Missing required field: class');
             if (!sectionVal) errors.push('Missing required field: section');
-            if ((row.phone || row.mobile || row.contact || row.father_phone || row.guardian_phone || row.guardian_p) && !phone) errors.push('Invalid phone number');
+            if ((row.phone || row.mobile || row.contact || row.father_phone) && !phone) errors.push('Invalid phone number');
 
             if (new_class_required && classVal) warnings.push(`Class "${classVal}" not found in ERP — will be auto-created on import`);
             if (new_section_required && sectionVal) warnings.push(`Section "${sectionVal}" not found in ERP — will be auto-created on import`);
             if (!father_name) warnings.push('Missing recommended field: father_name');
-            if (!phone) warnings.push('Missing recommended field: phone');
+            if (!phone && !guardian_phone) warnings.push('Missing recommended field: phone');
             if (!admission_number) warnings.push('Missing recommended field: admission_number');
 
             const admissionKey = admission_number.toLowerCase();
@@ -792,6 +796,8 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
                     father_name,
                     mother_name,
                     phone,
+                    guardian_phone,
+                    previous_school,
                     admission_number,
                     roll_number,
                     date_of_birth,

@@ -145,7 +145,10 @@ export default function BulkUploadPage() {
 
     // Template download
     const downloadTemplate = () => {
-        const csv = 'Name,Father Name,Mother Name,Gender,Date of Birth,Class,Section,Phone,Category,Aadhaar\nRaj Kumar,Suresh Kumar,Priya Kumar,Male,2010-05-15,5,A,9876543210,General,123456789012';
+        const headers = 'Student_ID,First_Name,Last_Name,Gender,DOB,Class,Section,Roll_No,Blood_Group,Aadhaar_No,Phone,Stud_Email,Father_Name,Mother_Name,Guardian_P,Address,City,State,Pincode,Transport,Bus_Route,Hostel,Category';
+        const sample1 = 'ADM001,Raj,Kumar,Male,2010-05-15,5,A,12,B+,123456789012,9876543210,raj@example.com,Suresh Kumar,Priya Kumar,,123 Main St,Delhi,Delhi,110001,Yes,Route-1,No,General';
+        const sample2 = 'ADM002,Priya,Sharma,Female,2011-03-22,4,B,8,O+,987654321098,9876500001,,Ramesh Sharma,Sunita Sharma,9876500002,456 Park Ave,Mumbai,Maharashtra,400001,No,,No,OBC';
+        const csv = [headers, sample1, sample2].join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

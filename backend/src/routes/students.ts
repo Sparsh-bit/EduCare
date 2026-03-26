@@ -460,7 +460,13 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
             const errors: string[] = [];
             const warnings: string[] = [];
 
-            const student_name = cleanText(row.name || row.student_name || row.full_name);
+            // Support split First_Name + Last_Name (common in professional school exports)
+            const first_name = cleanText(row.first_name);
+            const last_name = cleanText(row.last_name);
+            const combinedName = first_name && last_name ? `${first_name} ${last_name}`
+                : first_name || last_name || '';
+            const student_name = cleanText(row.name || row.student_name || row.full_name) || combinedName;
+
             const father_name = cleanText(row.father_name || row.guardian || row.guardian_name);
             const mother_name = cleanText(row.mother_name);
             const admission_number = cleanText(row.admission_number || row.admission_no || row.adm_no || row.admno);
@@ -468,8 +474,22 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
             const date_of_birth = parseDateToIso(row.dob || row.date_of_birth);
             const address = cleanText(row.address);
             const gender = normalizeGender(row.gender);
-            const email = cleanText(row.email || row.father_email);
-            const phone = normalizePhone(row.phone || row.mobile || row.contact || row.father_phone);
+            const email = cleanText(row.email || row.stud_email || row.father_email);
+            const phone = normalizePhone(
+                row.phone || row.mobile || row.contact || row.father_phone ||
+                row.guardian_phone || row.guardian_p
+            );
+            const blood_group = cleanText(row.blood_group);
+            const city = cleanText(row.city);
+            const state_val = cleanText(row.state);
+            const pincode = cleanText(row.pincode);
+            const aadhaar = cleanText(row.aadhaar);
+            const category = cleanText(row.category);
+            const religion = cleanText(row.religion);
+            // Logistics fields (new professional school format)
+            const transport = normalizeYesNo(row.transport);
+            const hostel = normalizeYesNo(row.hostel);
+            const bus_route = cleanText(row.bus_route);
 
             const classInput = row.class_name || row.class || row.std || row.standard || row.grade;
             const sectionInput = row.section_name || row.section || row.sec;
@@ -485,7 +505,7 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
             if (!student_name) errors.push('Missing required field: student_name');
             if (!classVal) errors.push('Missing required field: class');
             if (!sectionVal) errors.push('Missing required field: section');
-            if ((row.phone || row.mobile || row.contact || row.father_phone) && !phone) errors.push('Invalid phone number');
+            if ((row.phone || row.mobile || row.contact || row.father_phone || row.guardian_phone || row.guardian_p) && !phone) errors.push('Invalid phone number');
 
             if (new_class_required && classVal) warnings.push(`Class "${classVal}" not found in ERP — will be auto-created on import`);
             if (new_section_required && sectionVal) warnings.push(`Section "${sectionVal}" not found in ERP — will be auto-created on import`);
@@ -520,8 +540,18 @@ router.post('/import/preview', authenticate, authorize('owner', 'co-owner', 'ten
                     roll_number,
                     date_of_birth,
                     address,
+                    city,
+                    state: state_val,
+                    pincode,
                     gender,
                     email,
+                    blood_group,
+                    aadhaar,
+                    category,
+                    religion,
+                    transport,
+                    hostel,
+                    bus_route,
                 },
                 errors,
                 warnings,
@@ -685,7 +715,13 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
             const errors: string[] = [];
             const warnings: string[] = [];
 
-            const student_name = cleanText(row.name || row.student_name || row.full_name);
+            // Support split First_Name + Last_Name (common in professional school exports)
+            const first_name = cleanText(row.first_name);
+            const last_name = cleanText(row.last_name);
+            const combinedName = first_name && last_name ? `${first_name} ${last_name}`
+                : first_name || last_name || '';
+            const student_name = cleanText(row.name || row.student_name || row.full_name) || combinedName;
+
             const father_name = cleanText(row.father_name || row.guardian || row.guardian_name);
             const mother_name = cleanText(row.mother_name);
             const admission_number = cleanText(row.admission_number || row.admission_no || row.adm_no || row.admno);
@@ -693,8 +729,22 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
             const date_of_birth = parseDateToIso(row.dob || row.date_of_birth);
             const address = cleanText(row.address);
             const gender = normalizeGender(row.gender);
-            const email = cleanText(row.email || row.father_email);
-            const phone = normalizePhone(row.phone || row.mobile || row.contact || row.father_phone);
+            const email = cleanText(row.email || row.stud_email || row.father_email);
+            const phone = normalizePhone(
+                row.phone || row.mobile || row.contact || row.father_phone ||
+                row.guardian_phone || row.guardian_p
+            );
+            const blood_group = cleanText(row.blood_group);
+            const city = cleanText(row.city);
+            const state_val = cleanText(row.state);
+            const pincode = cleanText(row.pincode);
+            const aadhaar = cleanText(row.aadhaar);
+            const category = cleanText(row.category);
+            const religion = cleanText(row.religion);
+            // Logistics fields (new professional school format)
+            const transport = normalizeYesNo(row.transport);
+            const hostel = normalizeYesNo(row.hostel);
+            const bus_route = cleanText(row.bus_route);
 
             const classInput = row.class_name || row.class || row.std || row.standard || row.grade;
             const sectionInput = row.section_name || row.section || row.sec;
@@ -710,7 +760,7 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
             if (!student_name) errors.push('Missing required field: student_name');
             if (!classVal) errors.push('Missing required field: class');
             if (!sectionVal) errors.push('Missing required field: section');
-            if ((row.phone || row.mobile || row.contact || row.father_phone) && !phone) errors.push('Invalid phone number');
+            if ((row.phone || row.mobile || row.contact || row.father_phone || row.guardian_phone || row.guardian_p) && !phone) errors.push('Invalid phone number');
 
             if (new_class_required && classVal) warnings.push(`Class "${classVal}" not found in ERP — will be auto-created on import`);
             if (new_section_required && sectionVal) warnings.push(`Section "${sectionVal}" not found in ERP — will be auto-created on import`);
@@ -746,8 +796,18 @@ router.post('/import/:batchId/remap', authenticate, authorize('owner', 'co-owner
                     roll_number,
                     date_of_birth,
                     address,
+                    city,
+                    state: state_val,
+                    pincode,
                     gender,
                     email,
+                    blood_group,
+                    aadhaar,
+                    category,
+                    religion,
+                    transport,
+                    hostel,
+                    bus_route,
                 },
                 errors,
                 warnings,
@@ -1064,6 +1124,9 @@ router.post('/import/:batchId/confirm', authenticate, authorize('owner', 'co-own
                         status: 'active',
                         admission_date: parseDateToIso(r.admission_date) || new Date().toISOString().split('T')[0],
                         previous_school: valueOrNull(r.previous_school),
+                        transport: r.transport === 'yes' ? true : (r.transport === 'no' ? false : false),
+                        hostel: valueOrNull(r.hostel),
+                        bus_route: valueOrNull(r.bus_route),
                     }).returning('*');
 
                     await trx('student_class_history').insert({
@@ -1745,6 +1808,15 @@ function excelSerialToIso(serial: number): string | null {
     const date = new Date(excelEpochUtcMs + Math.round(serial * 86400000));
     if (Number.isNaN(date.getTime())) return null;
     return date.toISOString().split('T')[0];
+}
+
+/** Normalize yes/no/true/false/1/0 fields (transport, hostel). Returns 'yes', 'no', or null. */
+function normalizeYesNo(value: any): 'yes' | 'no' | null {
+    const v = String(value || '').trim().toLowerCase();
+    if (!v || v === 'null' || v === 'undefined' || v === 'na' || v === 'n/a') return null;
+    if (v === 'yes' || v === 'y' || v === 'true' || v === '1') return 'yes';
+    if (v === 'no' || v === 'n' || v === 'false' || v === '0') return 'no';
+    return null;
 }
 
 function normalizeGender(value: any): 'male' | 'female' | 'other' {

@@ -15,6 +15,7 @@
     "security:check": "ts-node src/scripts/security-check.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@supabase/supabase-js": "^2.98.0",
     "@types/compression": "^1.8.1",
     "@types/nodemailer": "^7.0.11",

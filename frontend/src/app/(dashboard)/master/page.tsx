@@ -9,8 +9,10 @@ const TABLES = [
     { key: 'grade_mappings', label: 'Grade Mappings', desc: 'Define grade thresholds (e.g. A1 = 91–100)', fields: ['name', 'code'] },
     { key: 'subject_groups', label: 'Subject Groups', desc: 'Group subjects by type (Languages, Sciences, etc.)', fields: ['name', 'code'] },
     { key: 'exam_areas', label: 'Exam Areas', desc: 'Assessment areas for co-scholastic evaluation', fields: ['name', 'code'] },
-    { key: 'fee_types', label: 'Fee Types', desc: 'Custom fee categories (Tuition, Transport, etc.)', fields: ['name', 'code'] },
-    { key: 'leave_types', label: 'Leave Types', desc: 'Leave categories for staff (Casual, Sick, Earned)', fields: ['name', 'code'] },
+    { key: 'fee_categories', label: 'Fee Categories', desc: 'Custom fee categories (Tuition, Transport, etc.)', fields: ['name', 'code'] },
+    { key: 'fee_groups', label: 'Fee Groups', desc: 'Group fee structures (e.g. Monthly, Annual)', fields: ['name', 'code'] },
+    { key: 'discount_policies', label: 'Discount Policies', desc: 'Sibling discount, merit discount configurations', fields: ['name', 'code'] },
+    { key: 'remarks_bank', label: 'Remarks Bank', desc: 'Pre-written report card remarks for teachers', fields: ['name', 'code'] },
 ] as const;
 
 type TableKey = typeof TABLES[number]['key'];

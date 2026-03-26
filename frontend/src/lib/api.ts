@@ -19,11 +19,45 @@ export function reportApiError(_error: unknown): void {
 }
 
 class ApiClient {
+    private _refreshing: Promise<string | null> | null = null;
+
     private getToken(): string | null {
         return authStorage.getToken();
     }
 
-    private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    // Silently exchange the stored refresh token for a fresh access token.
+    // Only one in-flight refresh at a time — concurrent callers share the same promise.
+    private async silentRefresh(): Promise<string | null> {
+        if (this._refreshing) return this._refreshing;
+        const refreshToken = authStorage.getRefreshToken();
+        if (!refreshToken) return null;
+
+        this._refreshing = (async () => {
+            try {
+                const res = await fetch(`${API_BASE}/auth/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken }),
+                    credentials: 'include',
+                });
+                if (!res.ok) return null;
+                const data = await res.json() as { token?: string };
+                if (data.token) {
+                    authStorage.setToken(data.token);
+                    return data.token;
+                }
+                return null;
+            } catch {
+                return null;
+            } finally {
+                this._refreshing = null;
+            }
+        })();
+
+        return this._refreshing;
+    }
+
+    private async request<T>(path: string, options: RequestInit = {}, _retry = true): Promise<T> {
         const token = this.getToken();
         const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
         const headers: Record<string, string> = {
@@ -48,6 +82,14 @@ class ApiClient {
             // Only redirect when a token was actually sent (session expired).
             // If no token was present we're on a public page (e.g. /login) — just throw.
             if (token && typeof window !== 'undefined') {
+                // Attempt silent token refresh before forcing re-login
+                if (_retry) {
+                    const newToken = await this.silentRefresh();
+                    if (newToken) {
+                        // Retry the original request with the fresh token
+                        return this.request<T>(path, options, false);
+                    }
+                }
                 authStorage.clear();
                 window.location.href = '/login';
             }

@@ -13,6 +13,11 @@ export const authStorage = {
         return storage ? storage.getItem(TOKEN_KEY) : null;
     },
 
+    getRefreshToken(): string | null {
+        const storage = getStorage();
+        return storage ? storage.getItem(REFRESH_TOKEN_KEY) : null;
+    },
+
     setAuth(token: string, refreshToken: string, user: unknown) {
         const storage = getStorage();
         if (!storage) return;
@@ -20,6 +25,11 @@ export const authStorage = {
         storage.setItem(TOKEN_KEY, token);
         storage.setItem(REFRESH_TOKEN_KEY, refreshToken);
         storage.setItem(USER_KEY, JSON.stringify(user));
+    },
+
+    setToken(token: string) {
+        const storage = getStorage();
+        if (storage) storage.setItem(TOKEN_KEY, token);
     },
 
     clear() {

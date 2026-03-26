@@ -1,33 +1,41 @@
 /**
- * AI Service — uses Anthropic Claude API (claude-haiku-4-5) for:
+ * AI Service — uses Google Gemini API (gemini-1.5-flash) for:
  *   1. Intelligent Excel header → ERP field mapping during bulk import
  *   2. English name → Devanagari (Hindi) transliteration
  *   3. Class suggestion based on student age
  *
- * File is named gemini.ts for historical reasons; all exports remain identical
- * so nothing else in the codebase needs to change.
- *
- * ANTHROPIC_API_KEY must be set in the environment.
+ * Requires GEMINI_API_KEY in the environment (free at aistudio.google.com).
+ * Falls back gracefully to heuristic matching / phonetic transliteration
+ * when the key is absent or the API call fails.
  */
-import Anthropic from '@anthropic-ai/sdk';
 import logger from '../config/logger';
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL   = 'gemini-1.5-flash';
+const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-function getClient(): Anthropic {
-    if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not configured');
-    return new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-}
+async function callGemini(prompt: string, maxTokens = 512): Promise<string> {
+    if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not configured');
 
-async function callClaude(prompt: string, maxTokens = 512): Promise<string> {
-    const client = getClient();
-    const message = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: maxTokens,
-        messages: [{ role: 'user', content: prompt }],
+    const res = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1 },
+        }),
+        signal: AbortSignal.timeout(30_000),
     });
-    const block = message.content[0];
-    return block.type === 'text' ? block.text.trim() : '';
+
+    if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Gemini HTTP ${res.status}: ${body.slice(0, 200)}`);
+    }
+
+    const data = await res.json() as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    return (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
 }
 
 // ─── Devanagari / Hindi Transliteration ─────────────────────────────────────
@@ -51,12 +59,12 @@ Rules:
 Output:`;
 
     try {
-        const result = await callClaude(prompt, 64);
+        const result = await callGemini(prompt, 64);
         const devanagari = extractDevanagari(result);
         if (devanagari && DEVANAGARI_RE.test(devanagari)) return devanagari;
-        logger.warn('Claude returned no Devanagari text, using phonetic fallback', { result });
+        logger.warn('Gemini returned no Devanagari text, using phonetic fallback', { result });
     } catch (err) {
-        logger.warn('Claude unavailable for transliteration, using phonetic fallback', { error: (err as Error).message });
+        logger.warn('Gemini unavailable for transliteration, using phonetic fallback', { error: (err as Error).message });
     }
     return phoneticToHindi(englishName);
 }
@@ -208,8 +216,8 @@ function labelForRank(rank: number): string {
 // ─── AI Header Mapping ───────────────────────────────────────────────────────
 
 /**
- * Map spreadsheet column headers to ERP student import fields using Claude AI.
- * Falls back to heuristic matching if ANTHROPIC_API_KEY is not set or API fails.
+ * Map spreadsheet column headers to ERP student import fields using Gemini AI.
+ * Falls back to heuristic matching if GEMINI_API_KEY is not set or API fails.
  */
 export async function mapStudentImportHeaders(
     headers: string[],
@@ -264,7 +272,7 @@ Rules:
 
 Output:`;
 
-        const raw = await callClaude(prompt, 512);
+        const raw = await callGemini(prompt, 512);
         const stripped = raw.replace(/```(?:json)?/gi, '').trim();
         const jsonMatch = stripped.match(/\{[\s\S]*\}/);
         if (!jsonMatch) return fallback;
@@ -282,7 +290,7 @@ Output:`;
         }
         return out;
     } catch (err) {
-        logger.warn('Claude unavailable for import header mapping, using heuristic fallback', { error: (err as Error).message });
+        logger.warn('Gemini unavailable for import header mapping, using heuristic fallback', { error: (err as Error).message });
         return fallback;
     }
 }
